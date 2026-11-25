@@ -1,0 +1,8 @@
+{
+  "appId": "jp.techgym.nazka",
+  "appName": "ナスカ×スティンガー",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#1a120b"
+  }
+}

@@ -14,7 +14,13 @@ const easeOut = t => 1 - Math.pow(1 - clamp(t, 0, 1), 3);
 const easeInOut = t => { t = clamp(t, 0, 1); return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
 const DEG = Math.PI / 180;
 
-const IS_TOUCH = matchMedia('(pointer: coarse)').matches;
+// Android アプリ（Capacitor）のときだけネイティブ機能を使う。Web 版では Capacitor がないので何もしない
+const CAP = window.Capacitor;
+const NATIVE = !!(CAP && CAP.isNativePlatform && CAP.isNativePlatform());
+const plugin = name => (NATIVE && CAP.Plugins ? CAP.Plugins[name] : null);
+const Ads = window.Ads || { available: false, canReward: false, showing: false, privacyOptionsRequired: false, initDone: Promise.resolve(),
+  showInterstitial: async () => {}, showRewarded: async () => 'unavailable', setBanner: () => {}, showPrivacyOptions: async () => {} };
+const IS_TOUCH = matchMedia('(pointer: coarse)').matches || NATIVE;
 const PLAY_R = 560;           // 移動できる半径 (m)
 const FLAT_R = 700;           // 平坦なパンパの半径
 const RISE = 1.6, STAND = 9, FALL = 1.6, COOL = 3.5;
@@ -646,7 +652,7 @@ const player = { pos: new V3(0, 0, 0), yaw: 0, pitch: 8 * DEG, speed: 0, phase: 
 let state = 'title', paused = false;
 let elapsed = 0, shots = 0, hits = 0, returns = 0, cleared = 0, lockedShots = 0;
 let reload = 0, riseTimer = 2, lockCand = null, lockT = 0, locked = null, lockHit = null;
-let missiles = [], enemies = [], enemyTimer = 8, intercepts = 0, deadT = 0;
+let missiles = [], enemies = [], enemyTimer = 8, intercepts = 0, deadT = 0, invul = 0, continues = 0;
 const RELOAD_T = 1.4;
 const order = [];  // 撃破順
 const keys = {};
@@ -663,7 +669,7 @@ function resetGame() {
   elapsed = 0; shots = 0; hits = 0; returns = 0; cleared = 0; lockedShots = 0;
   reload = 0; riseTimer = 1.5; lockCand = null; lockT = 0; locked = null;
   for (const e of enemies) scene.remove(e.obj);
-  enemies = []; enemyTimer = rand(9, 13); intercepts = 0; deadT = 0;
+  enemies = []; enemyTimer = rand(9, 13); intercepts = 0; deadT = 0; invul = 0; continues = 0;
   soldier.root.rotation.set(0, 0, 0); soldier.root.visible = true;
   document.body.classList.remove('danger');
 }
@@ -773,6 +779,7 @@ function update(dt) {
   if (state === 'dead') { updateDeath(dt); setSeeker(0); return; }
   if (state !== 'play' || paused) { setSeeker(0); return; }
   elapsed += dt;
+  invul = Math.max(0, invul - dt);
   reload = Math.max(0, reload - dt);
   kick = Math.max(0, kick - dt * 4);
 
@@ -992,7 +999,7 @@ function updateEnemies(dt) {
       e.dir.lerp(want, ang > 1e-4 ? Math.min(1, maxA / ang) : 1).normalize();
     }
     const step = e.speed * dt;
-    if (segDist(e.pos, e.dir, step, chest) < 1.6) { e.done = true; playerHit(e.pos.clone().addScaledVector(e.dir, _v.copy(chest).sub(e.pos).dot(e.dir))); return; }
+    if (invul <= 0 && segDist(e.pos, e.dir, step, chest) < 1.6) { e.done = true; playerHit(e.pos.clone().addScaledVector(e.dir, _v.copy(chest).sub(e.pos).dot(e.dir))); return; }
     e.pos.addScaledVector(e.dir, step);
     e.obj.position.copy(e.pos); e.obj.lookAt(_v.copy(e.pos).add(e.dir));
     e.obj.getObjectByName('flame').scale.setScalar(1.4 + Math.random() * .8);
@@ -1002,7 +1009,7 @@ function updateEnemies(dt) {
     flames.add(e.pos.x - e.dir.x * 1.8, e.pos.y - e.dir.y * 1.8, e.pos.z - e.dir.z * 1.8, 0, 0, 0, .08, 1.3, 0, 1, .35, .15, 1);
     if (e.pos.y < terrainH(e.pos.x, e.pos.z)) {
       e.done = true; explosion(e.pos, false); dustBurst(e.pos, 25, 3); sfx.boom(false);
-      if (e.pos.distanceTo(player.pos) < 3.5) { playerHit(e.pos.clone()); return; }
+      if (invul <= 0 && e.pos.distanceTo(player.pos) < 3.5) { playerHit(e.pos.clone()); return; }
     } else if (e.life > 14) { e.done = true; explosion(e.pos, false); sfx.boom(false); }
     if (!e.done && d < nearest) { nearest = d; nearestE = e; }
   }
@@ -1029,12 +1036,14 @@ function updateDeath(dt) {
   deadT += dt;
   const k = easeOut(deadT / .7);
   soldier.root.rotation.set(-Math.PI / 2 * k, player.yaw + Math.PI, 0, 'YXZ');
-  if (deadT > 2 && deadT - dt <= 2) showGameOver();
+  if (deadT > 2.5 && deadT - dt <= 2.5) { if (canContinue()) offerContinue(); else showGameOver(); }
 }
 function showGameOver() {
   cardQ.length = 0; $('card').classList.remove('show');
   const acc = shots ? Math.round(hits / shots * 100) : 0;
-  $('goStats').innerHTML = `生存時間 <b>${fmtTime(elapsed)}</b><br>撃ち抜いた地上絵 <b>${cleared} / ${glyphObjs.length}</b>　命中率 <b>${acc}%</b>　迎撃 <b>${intercepts}</b>`;
+  $('goStats').innerHTML = `生存時間 <b>${fmtTime(elapsed)}</b><br>撃ち抜いた地上絵 <b>${cleared} / ${glyphObjs.length}</b>　命中率 <b>${acc}%</b>　迎撃 <b>${intercepts}</b>` +
+    (continues ? `<br>コンティニュー ${continues} 回` : '');
+  shareText = `「ナスカの地上絵をスティンガー砲で」で地上絵を ${cleared}/${glyphObjs.length} 体撃ち抜いたけど、撃墜された…（生存 ${fmtTime(elapsed)}${continues ? `・コンティニュー${continues}回` : ''}）`;
   fillGallery($('goGallery'), order);
   show('gameover');
 }
@@ -1237,7 +1246,8 @@ function finish() {
   try { localStorage.setItem('nazka_best', JSON.stringify(best)); } catch (e) {}
   $('rTotal').textContent = r.total.toLocaleString();
   $('rRank').textContent = r.rank; $('rRank').className = 'rank r' + r.rank;
-  $('rBest').textContent = newBest ? '🏆 自己ベスト更新！' : `自己ベスト ${best.score.toLocaleString()}`;
+  $('rBest').textContent = (newBest ? '🏆 自己ベスト更新！' : `自己ベスト ${best.score.toLocaleString()}`) + (continues ? `　コンティニュー ${continues} 回` : '');
+  shareText = `「ナスカの地上絵をスティンガー砲で」で全${glyphObjs.length}体の地上絵を ${fmtTime(elapsed)} で撃ち抜いた！ スコア ${r.total.toLocaleString()}（ランク ${r.rank}）${continues ? `・コンティニュー${continues}回` : ''}`;
   $('rTable').innerHTML = r.parts.map(([a, b, c]) => `<tr><th>${a}</th><td>${b}</td><td class="${c < 0 ? 'neg' : ''}">${c > 0 ? '+' : c < 0 ? '−' : '±'}${Math.abs(c).toLocaleString()}</td></tr>`).join('');
   fillGallery($('rGallery'), order);
   show('result');
@@ -1247,7 +1257,127 @@ function finish() {
 // ============================================================
 //  画面切り替え
 // ============================================================
-function show(id) { for (const s of ['title', 'howto', 'result', 'pause', 'gallery', 'gameover']) $(s).classList.toggle('hidden', s !== id); }
+let screen = 'title', adBusy = false;
+function show(id) {
+  screen = id;
+  if (id) { el.msg.className = ''; el.warn.textContent = ''; }
+  for (const s of ['title', 'howto', 'result', 'pause', 'gallery', 'gameover', 'cont']) $(s).classList.toggle('hidden', s !== id);
+  if (id === 'title') updateTitleBest();
+  updateBanner();
+}
+// バナー広告：タイトル・遊び方・ポーズ・結果（ゲームオーバー）画面だけ。プレイ中は操作ボタンと重なるので出さない
+function updateBanner() {
+  const want = ['title', 'howto', 'pause', 'result', 'gameover'].includes(screen) && !adBusy;
+  Ads.setBanner(want);
+  document.body.classList.toggle('banner', want && Ads.available);
+}
+function updateTitleBest() {
+  $('titleBest').textContent = best.score ? `ベストスコア ${best.score.toLocaleString()}` : '';
+}
+// 全画面広告：出撃・タイトルへ戻る・ポーズからの再開・もう一度 のたびに毎回出す（アプリのみ）
+async function withInterstitial(next) {
+  if (adBusy) return;
+  if (Ads.available) {
+    adBusy = true;
+    for (const s of ['title', 'howto', 'result', 'pause', 'gameover']) $(s).classList.add('hidden');
+    updateBanner();
+    await Ads.showInterstitial(3000);
+    adBusy = false;
+  }
+  next();
+}
+function goTitle() { resetGame(); state = 'title'; paused = false; hudVisible(false); show('title'); }
+function pauseGame() {
+  if (state !== 'play' || paused) return;
+  paused = true; for (const k in keys) keys[k] = false;
+  show('pause');
+  if (document.pointerLockElement) document.exitPointerLock();
+}
+function resumeGame() { if (state !== 'play') return; paused = false; show(null); if (!IS_TOUCH) requestLock(); }
+
+// シェア（アプリでは Android の共有メニュー、Web では共有 API かコピー）
+let shareText = '';
+const SHARE_URL = 'https://techgymjp.github.io/nazka/';
+async function share() {
+  const nativeShare = plugin('Share');
+  try {
+    if (nativeShare) { await nativeShare.share({ title: 'ナスカの地上絵をスティンガー砲で', text: shareText, url: SHARE_URL, dialogTitle: '結果をシェア' }); return; }
+    if (navigator.share) { await navigator.share({ title: 'ナスカの地上絵をスティンガー砲で', text: shareText, url: SHARE_URL }); return; }
+    await navigator.clipboard.writeText(`${shareText} ${SHARE_URL}`);
+    flashMsg('結果をコピーしました');
+  } catch (e) { /* キャンセル */ }
+}
+
+// ---------- リワード広告のチート：撃墜されたら広告を見てその場からコンティニュー（アプリのみ・1 ゲーム 3 回まで） ----------
+// 撃墜の様子を見届けられるよう 2.5 秒待ってから出し、8 秒で自動的にゲームオーバーへ進む
+const CONT_MAX = 3, CONT_WAIT = 8;
+const cont = { active: false, busy: false, deadline: 0, timer: 0 };
+function canContinue() { return Ads.canReward && continues < CONT_MAX; }
+function offerContinue() {
+  Object.assign(cont, { active: true, busy: false, deadline: performance.now() + CONT_WAIT * 1000 });
+  $('contWatch').disabled = false; $('contWatch').textContent = '広告を見て続ける';
+  $('contNote').textContent = `広告を最後まで見ると、この場所から続けられます（あと ${CONT_MAX - continues} 回）`;
+  show('cont');
+  tickContinue();
+}
+function tickContinue() {
+  clearTimeout(cont.timer);
+  if (!cont.active) return;
+  if (cont.busy) { cont.deadline = performance.now() + CONT_WAIT * 1000; }   // 広告の表示中は数えない
+  else {
+    const left = (cont.deadline - performance.now()) / 1000;
+    $('contNo').textContent = `あきらめる（${Math.max(0, Math.ceil(left))}）`;
+    if (left <= 0) { closeContinue(); showGameOver(); return; }
+  }
+  cont.timer = setTimeout(tickContinue, 200);
+}
+function closeContinue() { cont.active = false; clearTimeout(cont.timer); }
+$('contNo').onclick = () => { if (!cont.active || cont.busy) return; closeContinue(); showGameOver(); };
+$('contWatch').onclick = async () => {
+  if (!cont.active || cont.busy) return;
+  cont.busy = true;
+  $('contWatch').disabled = true; $('contWatch').textContent = '広告を読み込み中…';
+  const result = await Ads.showRewarded();
+  if (!cont.active) return;
+  if (result === 'unavailable') {
+    $('contNote').textContent = '広告を読み込めませんでした';
+    setTimeout(() => { closeContinue(); showGameOver(); }, 1800);
+    return;
+  }
+  closeContinue();
+  if (result !== 'rewarded') { showGameOver(); return; }
+  // 広告を最後まで見たときだけ：その場で復活（3 秒間は無敵）
+  continues++;
+  state = 'play'; paused = false; invul = 3;
+  soldier.root.rotation.set(0, player.yaw + Math.PI, 0, 'YXZ');
+  enemyTimer = Math.max(enemyTimer, 6);
+  show(null); hudVisible(true);
+  flashMsg(`コンティニュー！（${continues}/${CONT_MAX}）`);
+};
+
+// Android の戻るボタン：プレイ中はポーズ（ポーズ中なら再開）、遊び方・図鑑はタイトルへ、タイトル・結果画面ではアプリを終了
+if (plugin('App')) {
+  plugin('App').addListener('backButton', () => {
+    if (adBusy) return;
+    if (cont.active) { if (!cont.busy) { closeContinue(); showGameOver(); } return; }
+    if (state === 'play' && !paused) pauseGame();
+    else if (state === 'play' && paused) withInterstitial(resumeGame);
+    else if (screen === 'howto') withInterstitial(goTitle);
+    else if (screen === 'gallery') show(state === 'result' ? 'result' : 'title');
+    else if (state === 'dead') { /* 撃墜演出中は待つ */ }
+    else plugin('App').exitApp();
+  });
+}
+// 別のアプリに切り替えたら自動でポーズし、音も止める（広告の表示中は広告側が音を止めている）
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { pauseGame(); window.GameSound.suspend(); }
+  else if (!Ads.showing) window.GameSound.resume();
+});
+
+// タイトル画面の下：バージョン（アプリ版）・プライバシーポリシー・広告の設定（EU など同意が必要な地域だけ）
+if (window.APP_VERSION && window.APP_VERSION !== 'dev') $('buildInfo').textContent = window.APP_VERSION;
+Ads.initDone.then(() => { if (Ads.privacyOptionsRequired) $('adPrivacy').hidden = false; updateBanner(); });
+$('adPrivacyLink').onclick = e => { e.preventDefault(); Ads.showPrivacyOptions(); };
 function hudVisible(v) { document.body.classList.toggle('playing', v); }
 function fillGallery(container, list) {
   container.replaceChildren(...list.map((def, i) => {
@@ -1267,35 +1397,38 @@ function startGame() {
   flashMsg('地上絵が立ち上がるのを探せ！');
   showHint();
 }
-$('startBtn').onclick = startGame;
-$('howtoStart').onclick = startGame;
+$('startBtn').onclick = () => withInterstitial(startGame);
+$('howtoStart').onclick = () => withInterstitial(startGame);
 $('howtoBtn').onclick = () => show('howto');
-$('howtoBack').onclick = () => show('title');
-$('retryBtn').onclick = startGame;
+$('howtoBack').onclick = () => withInterstitial(goTitle);
+$('retryBtn').onclick = () => withInterstitial(startGame);
+$('rShare').onclick = share;
+$('goShare').onclick = share;
+$('pauseResume').onclick = () => withInterstitial(resumeGame);
+$('pauseTitle').onclick = () => withInterstitial(goTitle);
+$('pauseBtn').onclick = e => { e.stopPropagation(); pauseGame(); };
 $('galleryBtn').onclick = () => { fillGallery($('gList'), GLYPHS); show('gallery'); };
 $('galleryBack').onclick = () => show(state === 'result' ? 'result' : 'title');
 $('rGalleryAll').onclick = () => { fillGallery($('gList'), GLYPHS); show('gallery'); };
-$('titleBtn').onclick = () => { state = 'title'; show('title'); };
-$('goRetry').onclick = startGame;
-$('goTitle').onclick = () => { resetGame(); state = 'title'; show('title'); };
-$('pause').onclick = () => { requestLock(); };
+$('titleBtn').onclick = () => withInterstitial(goTitle);
+$('goRetry').onclick = () => withInterstitial(startGame);
+$('goTitle').onclick = () => withInterstitial(goTitle);
 
 // ============================================================
 //  入力
 // ============================================================
 let noLock = false;
 function requestLock() {
-  if (IS_TOUCH || noLock) { paused = false; show(null); return; }
+  if (IS_TOUCH || noLock) return;
   try {
     const p = canvas.requestPointerLock();
     if (p && p.catch) p.catch(() => { noLock = true; paused = false; show(null); });
   } catch (e) { noLock = true; }
 }
 document.addEventListener('pointerlockchange', () => {
-  if (document.pointerLockElement === canvas) { paused = false; show(null); }
-  else if (state === 'play' && !noLock) { paused = true; show('pause'); }
+  if (document.pointerLockElement !== canvas && state === 'play' && !noLock) pauseGame();
 });
-document.addEventListener('pointerlockerror', () => { noLock = true; paused = false; show(null); });
+document.addEventListener('pointerlockerror', () => { noLock = true; });
 
 const SENS = .0022;
 let dragging = false, dragMoved = 0;
@@ -1320,6 +1453,7 @@ window.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space') { e.preventDefault(); initAudio(); fire(); }
   if (e.code === 'KeyM') toggleMute();
+  if (e.code === 'KeyP') { if (paused) withInterstitial(resumeGame); else pauseGame(); }
   if (e.code.startsWith('Arrow')) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -1546,6 +1680,10 @@ function bgmStep(step, t) {
   for (const n of ph) if (n.s === local && !n.rest) quena(t, n.d * 60 / BGM.bpm / 4 * .95, n.m, full ? .11 : .085);
 }
 
+window.GameSound = {
+  suspend() { if (AC && AC.state === 'running') AC.suspend(); },
+  resume() { if (AC && AC.state === 'suspended') AC.resume(); },
+};
 function toggleMute() {
   muted = !muted; if (master) master.gain.value = muted ? 0 : .55;
   $('muteBtn').textContent = muted ? '🔇' : '🔊';
@@ -1588,5 +1726,6 @@ for (const g of glyphObjs.slice(0, 5)) {
   setYaw(g, Math.atan2(-g.center.x, -g.center.z)); setK(g, 1); setLook(g, 'stand');
 }
 document.body.classList.add('ready');
+updateTitleBest();
 requestAnimationFrame(loop);
-window.__nazka = { get state() { return state; }, glyphObjs, player, fire, step(sec) { for (let t = 0; t < sec; t += 1 / 30) { update(1 / 30); updateCamera(1 / 30); } }, get missiles() { return missiles; }, get enemies() { return enemies; }, launchEnemy, keys, camera, finish: () => { cleared = glyphObjs.length; finish(); } };
+window.__nazka = { get state() { return state; }, glyphObjs, player, fire, step(sec) { for (let t = 0; t < sec; t += 1 / 30) { update(1 / 30); updateCamera(1 / 30); } }, get missiles() { return missiles; }, get enemies() { return enemies; }, launchEnemy, keys, camera, finish: () => { cleared = glyphObjs.length; finish(); } };  // @web-only

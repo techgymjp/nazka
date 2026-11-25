@@ -29,13 +29,47 @@
 
 線画は実在の地上絵をもとにした簡略的な再現です。パンアメリカン・ハイウェイ（トカゲの地上絵を横切る）やミラドール（観測やぐら）と「木」「手」の位置関係も再現しています。
 
+## Android アプリ
+
+Capacitor で Android アプリにしています（ゲームのファイルはアプリに同梱。オフラインで遊べます）。
+
+- 動作確認用 APK（テスト広告・デバッグ署名）：リリース画面 https://github.com/techgymjp/nazka/releases/tag/android-latest
+- APK を直接ダウンロード：https://github.com/techgymjp/nazka/releases/latest/download/nazka.apk
+- スマホで読み取ってリリース画面を開く：
+
+  <img src="docs/apk-qr.png" width="200" alt="Android 版 APK のリリース画面の QR コード">
+
+| 項目 | 内容 |
+| --- | --- |
+| パッケージ名 | `jp.techgym.nazka` |
+| 画面の向き | 横画面（sensorLandscape） |
+| 広告（AdMob） | バナー：タイトル・遊び方・ポーズ・結果画面の下中央／インタースティシャル：出撃・タイトルへ戻る・ポーズからの再開・もう一度 のたびに／リワード：撃墜されたときの「コンティニュー」（1 ゲーム 3 回まで） |
+| ビルド | GitHub Actions（`.github/workflows/android.yml`）。既定ブランチの push で APK を Release `android-latest` に載せ、Secrets があれば Google Play 用の署名付き AAB を Artifact に上げる |
+| ストア掲載文の下書き | `docs/store/listing.md` |
+
+ローカルで Android プロジェクトを更新する場合：
+
+```bash
+npm ci
+npm run android:sync
+```
+
+- `npm run build:app` は `www/` にアプリ用のファイルを作ります（Web 版だけのテスト用コード `// @web-only` を取り除く）。`ADMOB_MODE=production` を付けると本番の広告になります
+- アイコンと起動画面は `assets/` の元画像から `npx @capacitor/assets generate --android` で生成しています
+
 ## 技術
 - [three.js](https://threejs.org/) r160（`vendor/` に同梱、MIT License）
 - 地形・テクスチャ・兵士モデル・効果音はすべてコードで生成しています（外部アセットなし）
-- ビルド不要。静的ファイルのまま GitHub Pages で公開しています
+- Web 版はビルド不要。静的ファイルのまま GitHub Pages で公開しています
 
 ローカルで遊ぶ場合は、任意の静的サーバーで配信してください（ES Modules のため `file://` 直開きは不可）。
 
 ```bash
 python3 -m http.server 8000
 ```
+
+## ライセンス
+
+著作権はテックジム株式会社に帰属します（All rights reserved）。許可なく複製・改変・再配布すること、Web サイトやアプリ（Google Play、App Store など）として公開・販売すること、名前・ロゴ・アイコン・画像を使うことを禁止します。
+テックジムの受講生が学習目的で複製・改変することは許可しますが、アプリストアでの公開・広告の掲載・販売などの商用利用は禁止です。詳しくは [LICENSE](LICENSE) をご覧ください。
+同梱の three.js は MIT License です（`vendor/three.LICENSE`）。
