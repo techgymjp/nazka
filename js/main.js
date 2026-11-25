@@ -942,7 +942,8 @@ function updateCamera(dt) {
   const f = new V3(-Math.sin(player.yaw) * Math.cos(player.pitch), Math.sin(player.pitch), -Math.cos(player.yaw) * Math.cos(player.pitch));
   const right = new V3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
   const sh = new V3(player.pos.x, player.pos.y + 1.6, player.pos.z);
-  const cp = sh.clone().addScaledVector(f, -2.9).addScaledVector(right, 1.05).add(new V3(0, .32, 0));
+  const narrow = camera.aspect < 1;  // 縦画面は兵士が見切れないよう寄せる
+  const cp = sh.clone().addScaledVector(f, narrow ? -3.8 : -2.9).addScaledVector(right, narrow ? .5 : 1.05).add(new V3(0, narrow ? .45 : .32, 0));
   const gh = terrainH(cp.x, cp.z) + .35; if (cp.y < gh) cp.y = gh;
   if (state === 'title' || state === 'result') {
     const a = time * .08;
@@ -1023,7 +1024,7 @@ function drawHUD() {
     hctx.restore();
   }
   // レーダー
-  const R = Math.min(78, W * .17), rx = W - R - 16, ry = R + 16 + (W < 600 ? 64 : 0), range = 520;
+  const R = clamp(Math.min(W, H) * .15, 38, 78), rx = W - R - 12, ry = R + 12 + (W < 600 ? 64 : 0), range = 520;
   hctx.save();
   hctx.fillStyle = 'rgba(20,14,8,.55)'; hctx.strokeStyle = 'rgba(255,230,190,.35)'; hctx.lineWidth = 1;
   hctx.beginPath(); hctx.arc(rx, ry, R, 0, Math.PI * 2); hctx.fill(); hctx.stroke();

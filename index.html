@@ -80,6 +80,24 @@
   .elBtn { position:fixed; right:122px; width:52px; height:44px; border-radius:10px; padding:0; font-size:18px; z-index:6; background:rgba(0,0,0,.35); color:#fff; box-shadow:none; border:1px solid rgba(255,230,190,.4) }
   #elUp { bottom:128px } #elDn { bottom:76px }
   body.touch #gauge { bottom:12px } body.touch #card { bottom:auto; top:120px }
+  body.touch #hint { top:58%; white-space:normal; max-width:88vw; text-align:center; border-radius:14px }
+  /* 縦向きスマホ：方位・仰角表示は左下へ */
+  @media (max-width: 520px) {
+    body.touch #gauge { left:14px; transform:none; text-align:left; bottom:16px }
+    body.touch #gauge .row { flex-direction:column; gap:0 } body.touch #gauge .row b { font-size:17px }
+    body.touch #reload { width:120px; margin-left:0 }
+    #muteBtn { bottom:auto; top:12px; right:auto; left:50%; transform:translateX(-50%) }
+  }
+  /* 横向きスマホなど高さが低い画面：ボタンを右下にコンパクトに並べ、レーダーと重ならないように */
+  @media (max-height: 480px) {
+    #fireBtn { width:74px; height:74px; right:14px; bottom:14px; font-size:14px }
+    .elBtn { right:98px; width:48px; height:38px; font-size:15px }
+    #elUp { bottom:58px } #elDn { bottom:14px }
+    #muteBtn { right:auto; left:12px; bottom:12px }
+    body.touch #card { top:auto; bottom:12px; left:12px; width:min(320px,calc(100vw - 200px)) }
+    body.touch #card .thumb canvas { width:52px; height:52px } body.touch #card .desc { font-size:11px }
+    #stats .big { font-size:22px } #stats { font-size:12px }
+  }
 
   /* リザルト */
   .rank { font-size:72px; font-weight:900; line-height:1; margin:8px 0 }
