@@ -62,7 +62,11 @@
   #hint { position:fixed; left:50%; bottom:82px; transform:translateX(-50%); background:rgba(20,12,6,.6); border:1px solid rgba(255,220,170,.3); border-radius:999px;
     padding:8px 16px; font-size:14px; white-space:nowrap; opacity:0; transition:opacity .5s; pointer-events:none }
   #hint.show { opacity:1 } #hint .sp { display:none } body.touch #hint .sp { display:inline } body.touch #hint .pc { display:none } body.touch #hint { bottom:auto; top:96px; font-size:12px }
-  #msg.show { opacity:1 } #msg.warn { color:#ff9a85 }
+  #msg.show { opacity:1 }
+  #warn { position:fixed; left:50%; top:30%; transform:translateX(-50%); color:#ff4a3a; font-weight:900; font-size:20px; letter-spacing:.06em; text-shadow:0 0 8px rgba(0,0,0,.8); pointer-events:none; white-space:nowrap }
+  #dangerFx { position:fixed; inset:0; pointer-events:none; opacity:0; box-shadow:inset 0 0 120px 30px rgba(255,30,20,.55); transition:opacity .2s }
+  body.danger #dangerFx { animation:danger .5s infinite alternate }
+  @keyframes danger { from { opacity:.25 } to { opacity:1 } } #msg.warn { color:#ff9a85 }
   #card { position:fixed; left:14px; bottom:84px; width:min(360px,calc(100vw - 28px)); display:flex; gap:12px; align-items:center; padding:10px 12px;
     background:linear-gradient(135deg,#f4e3c2,#e3c99b); color:#3a2614; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.45);
     transform:translateX(-120%); transition:transform .35s cubic-bezier(.2,.9,.3,1.2); pointer-events:none; z-index:5 }
@@ -128,6 +132,8 @@
   <div id="reload"><div id="reloadBar"></div></div>
 </div>
 <div id="msg"></div>
+<div id="warn" class="hudui"></div>
+<div id="dangerFx"></div>
 <div id="hint" class="hudui"><span class="pc"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動　<kbd>Shift</kbd> ダッシュ　マウス 照準・仰角　クリック 発射</span><span class="sp">左側スワイプで移動　右側スワイプで照準・仰角　FIREで発射</span></div>
 <div id="card"><div class="thumb"></div><div><div class="no"></div><div class="name"></div><div class="desc"></div></div></div>
 <div id="touchUI">
@@ -150,17 +156,18 @@
   <div class="panel">
     <h2>遊び方</h2>
     <p class="lead">ペルー・ナスカ平原。砂漠に描かれた地上絵が、地面ごと次々と<b>垂直に立ち上がる</b>！<br>
-      倒れて地上絵に戻る前に、スティンガーで撃ち抜け。全19体を撃ち抜くまでのタイムと腕前を競おう。</p>
+      倒れて地上絵に戻る前に、スティンガーで撃ち抜け。全27体を撃ち抜くまでのタイムと腕前を競おう。</p>
     <ul class="howto">
       <li><b>移動</b>：<kbd>W</kbd>前 <kbd>S</kbd>後 <kbd>A</kbd>左 <kbd>D</kbd>右（<kbd>Shift</kbd>でダッシュ）— 走り回って好位置を取ろう</li>
       <li><b>照準</b>：マウスで方位と<b>仰角</b>を調整（<kbd>↑</kbd><kbd>↓</kbd>・ホイールで微調整）</li>
       <li><b>発射</b>：クリック / <kbd>Space</kbd>　地上絵に照準を合わせると<b>ロックオン</b>して誘導</li>
       <li>地上絵は一定時間で<b>倒れて地面に戻る</b>（取り逃がし＝減点）</li>
-      <li>スコア＝撃破数＋タイム＋命中率−取り逃がし</li>
+      <li>立ち上がった地上絵は<b>ミサイルを撃ってくる</b>。当たれば即ゲームオーバー！<br>警報が鳴ったら、直前で<b>横に走ってかわす</b>か、スティンガーで<b>迎撃</b>しよう</li>
+      <li>スコア＝撃破数＋タイム＋命中率＋迎撃−取り逃がし</li>
       <li class="tch">スマホ：左側スワイプで移動、右側スワイプで照準（上下で仰角）、FIREで発射</li>
       <li><kbd>Esc</kbd>で一時停止、<kbd>M</kbd>で消音</li>
     </ul>
-    <p class="note">登場する地上絵はすべて実在するナスカの地上絵がモチーフです（線画は簡略化した再現）。<br>
+    <p class="note">登場する地上絵はすべて、ナスカとその周辺（パルパ・パラカス）に実在する地上絵がモチーフです（線画は簡略化した再現）。<br>
       本物の地上絵は1994年に世界遺産に登録された大切な文化財。立ち上がるのはゲームの中だけ！</p>
     <div class="btns" style="margin-top:16px"><button id="howtoStart">出撃する</button><button id="howtoBack" class="sub">もどる</button></div>
   </div>
@@ -176,6 +183,16 @@
     <p class="note" style="margin-top:0">紀元前後〜紀元700年ごろのナスカ文化の人々が、地表の赤黒い石を取り除いて下の明るい地面を出すことで描いたと考えられています。</p>
     <div class="gallery" id="gList"></div>
     <button id="galleryBack" class="sub">もどる</button>
+  </div>
+</div>
+
+<!-- ゲームオーバー -->
+<div id="gameover" class="overlay hidden">
+  <div class="panel wide">
+    <h1 style="color:#ff8a70"><small>GAME OVER</small>撃墜された…</h1>
+    <p class="stats lead" id="goStats"></p>
+    <div class="gallery" id="goGallery"></div>
+    <div class="btns"><button id="goRetry">もう一度</button><button id="goTitle" class="sub">タイトルへ</button></div>
   </div>
 </div>
 

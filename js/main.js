@@ -479,11 +479,11 @@ const glyphObjs = [];
 function placeGlyphs() {
   const placed = [];
   const ok = (p, sz) => {
-    if (p.length() < 70 || p.length() > 500) return false;
+    if (p.length() < 70 || p.length() > 530) return false;
     if (MIRADOR.distanceTo(p) < 25 + sz / 2) return false;
     const rel = new V3().subVectors(p, HWY_A), along = rel.dot(HWY_DIR), off = Math.abs(rel.dot(HWY_N));
     if (along > -50 && along < 750 && off < sz / 2 + 10) return false;
-    return placed.every(q => q.p.distanceTo(p) > (q.sz + sz) / 2 + 30);
+    return placed.every(q => q.p.distanceTo(p) > (q.sz + sz) / 2 + 22);
   };
   for (const def of GLYPHS) {
     let p;
@@ -492,7 +492,7 @@ function placeGlyphs() {
     else if (def.id === 'hands') p = new V3().copy(MIRADOR).addScaledVector(HWY_N, -40).addScaledVector(HWY_DIR, 12);
     else {
       for (let k = 0; k < 400; k++) {
-        const a = rand(0, Math.PI * 2), r = rand(90, 480);
+        const a = rand(0, Math.PI * 2), r = rand(90, 520);
         p = new V3(Math.cos(a) * r, 0, Math.sin(a) * r);
         if (ok(p, def.size)) break;
       }
@@ -646,7 +646,7 @@ const player = { pos: new V3(0, 0, 0), yaw: 0, pitch: 8 * DEG, speed: 0, phase: 
 let state = 'title', paused = false;
 let elapsed = 0, shots = 0, hits = 0, returns = 0, cleared = 0, lockedShots = 0;
 let reload = 0, riseTimer = 2, lockCand = null, lockT = 0, locked = null, lockHit = null;
-let missiles = [];
+let missiles = [], enemies = [], enemyTimer = 8, intercepts = 0, deadT = 0;
 const RELOAD_T = 1.4;
 const order = [];  // 撃破順
 const keys = {};
@@ -662,6 +662,10 @@ function resetGame() {
   player.pos.set(0, 0, 0); player.yaw = 0; player.pitch = 8 * DEG; player.speed = 0;
   elapsed = 0; shots = 0; hits = 0; returns = 0; cleared = 0; lockedShots = 0;
   reload = 0; riseTimer = 1.5; lockCand = null; lockT = 0; locked = null;
+  for (const e of enemies) scene.remove(e.obj);
+  enemies = []; enemyTimer = rand(9, 13); intercepts = 0; deadT = 0;
+  soldier.root.rotation.set(0, 0, 0); soldier.root.visible = true;
+  document.body.classList.remove('danger');
 }
 
 // ============================================================
@@ -766,6 +770,7 @@ const _v = new V3(), _w = new V3();
 function update(dt) {
   time += dt;
   smoke.update(dt); flames.update(dt); updateDebris(dt);
+  if (state === 'dead') { updateDeath(dt); setSeeker(0); return; }
   if (state !== 'play' || paused) { setSeeker(0); return; }
   elapsed += dt;
   reload = Math.max(0, reload - dt);
@@ -908,6 +913,14 @@ function update(dt) {
       m.done = true; hitGlyph(hitG, p);
       continue;
     }
+    // 敵ミサイルの迎撃（近接信管）
+    const ie = enemies.find(e => !e.done && segDist(m.pos, m.dir, step, e.pos) < 5);
+    if (ie) {
+      m.done = true; ie.done = true; intercepts++;
+      explosion(ie.pos, true); sfx.boom(true); sfx.chime();
+      flashMsg('迎撃成功！ ＋800');
+      continue;
+    }
     m.pos.addScaledVector(m.dir, step);
     m.obj.position.copy(m.pos); m.obj.lookAt(_v.copy(m.pos).add(m.dir));
     const fl = m.obj.getObjectByName('flame'); fl.visible = ignited; fl.scale.setScalar(.8 + Math.random() * .6);
@@ -925,6 +938,105 @@ function update(dt) {
     } else if (m.life > 6) { m.done = true; explosion(m.pos, false); sfx.boom(false); }
   }
   missiles = missiles.filter(m => { if (m.done) scene.remove(m.obj); return !m.done; });
+  updateEnemies(dt);
+}
+
+// ============================================================
+//  敵ミサイル（立ち上がった地上絵から発射される）
+// ============================================================
+const enemyGeo = (() => {
+  const g = missileGeo.clone(true);
+  g.traverse(o => { if (o.isMesh) o.material = o.material.clone(); });
+  g.children[0].material.color.setHex(0x3a3a34);
+  g.children[1].material.color.setHex(0xd02a1a); g.children[1].material.emissive = new THREE.Color(0x801000);
+  const fl = g.getObjectByName('flame'); fl.material.color.setHex(0xff5030); fl.scale.set(1.6, 1.6, 1.6);
+  g.scale.setScalar(1.6);
+  return g;
+})();
+function segDist(p, d, len, q) {
+  const t = clamp(_v.copy(q).sub(p).dot(d), 0, len);
+  return _w.copy(p).addScaledVector(d, t).distanceTo(q);
+}
+function chestPos() { return new V3(player.pos.x, player.pos.y + 1.3, player.pos.z); }
+function launchEnemy(g) {
+  const from = g.mesh.localToWorld(new V3(rand(-.2, .2) * g.size, rand(0, .3) * g.size, 1));
+  const to = chestPos();
+  const dir = to.clone().sub(from).normalize(); dir.y += .35; dir.normalize();
+  const obj = enemyGeo.clone(true); obj.position.copy(from); scene.add(obj);
+  enemies.push({ obj, pos: from, dir, speed: 38, life: 0, src: g, blind: false, smokeAcc: 0, beep: 0 });
+  explosion(from, false);
+  for (let i = 0; i < 20; i++) smoke.add(from.x, from.y, from.z, rand(-3, 3), rand(0, 4), rand(-3, 3), rand(1.5, 3), rand(1, 2), 2, .3, .27, .24, .6, -.2, 1);
+  sfx.enemyLaunch(from.distanceTo(player.pos));
+  flashMsg(`⚠ ${g.def.name}がミサイルを発射！`, true);
+}
+function updateEnemies(dt) {
+  // 発射のタイミング
+  enemyTimer -= dt;
+  if (enemyTimer <= 0) {
+    const shooters = glyphObjs.filter(g => g.state === 'standing' && g.t > 1.5 && g.t < STAND - 1.5 && g.center.distanceTo(player.pos) < 460 && g.center.distanceTo(player.pos) > 45);
+    if (shooters.length && enemies.length < 2) {
+      launchEnemy(pick(shooters));
+      const k = cleared / glyphObjs.length;
+      enemyTimer = rand(9, 15) * (1 - k * .45);
+    } else enemyTimer = 1;
+  }
+  let nearest = Infinity, nearestE = null;
+  const chest = chestPos();
+  for (const e of enemies) {
+    e.life += dt;
+    e.speed = Math.min(75, e.speed + 30 * dt);
+    const toP = chest.clone().sub(e.pos), d = toP.length();
+    if (d < 26) e.blind = true;               // 至近距離でシーカーが外れる → 横に走ればかわせる
+    if (!e.blind && e.life > .5) {
+      const want = toP.normalize(), ang = e.dir.angleTo(want), maxA = 1.1 * dt;
+      e.dir.lerp(want, ang > 1e-4 ? Math.min(1, maxA / ang) : 1).normalize();
+    }
+    const step = e.speed * dt;
+    if (segDist(e.pos, e.dir, step, chest) < 1.6) { e.done = true; playerHit(e.pos.clone().addScaledVector(e.dir, _v.copy(chest).sub(e.pos).dot(e.dir))); return; }
+    e.pos.addScaledVector(e.dir, step);
+    e.obj.position.copy(e.pos); e.obj.lookAt(_v.copy(e.pos).add(e.dir));
+    e.obj.getObjectByName('flame').scale.setScalar(1.4 + Math.random() * .8);
+    e.smokeAcc += step;
+    while (e.smokeAcc > .7) { e.smokeAcc -= .7; const b = e.pos.clone().addScaledVector(e.dir, -1.6 - e.smokeAcc);
+      smoke.add(b.x, b.y, b.z, rand(-.3, .3), rand(0, .4), rand(-.3, .3), rand(2.5, 4), .8, 1.8, .42, .38, .34, .6, -.05, .3); }
+    flames.add(e.pos.x - e.dir.x * 1.8, e.pos.y - e.dir.y * 1.8, e.pos.z - e.dir.z * 1.8, 0, 0, 0, .08, 1.3, 0, 1, .35, .15, 1);
+    if (e.pos.y < terrainH(e.pos.x, e.pos.z)) {
+      e.done = true; explosion(e.pos, false); dustBurst(e.pos, 25, 3); sfx.boom(false);
+      if (e.pos.distanceTo(player.pos) < 3.5) { playerHit(e.pos.clone()); return; }
+    } else if (e.life > 14) { e.done = true; explosion(e.pos, false); sfx.boom(false); }
+    if (!e.done && d < nearest) { nearest = d; nearestE = e; }
+  }
+  enemies = enemies.filter(e => { if (e.done) scene.remove(e.obj); return !e.done; });
+  // 警報
+  document.body.classList.toggle('danger', !!nearestE);
+  el.warn.textContent = nearestE ? `⚠ ミサイル接近 ${nearest.toFixed(0)}m${nearest < 90 ? '　横に走ってかわせ！' : ''}` : '';
+  if (nearestE) {
+    nearestE.beep -= dt;
+    if (nearestE.beep <= 0) { nearestE.beep = clamp(nearest / 260, .07, .6); sfx.alarm(nearest); }
+  }
+}
+function playerHit(p) {
+  state = 'dead'; deadT = 0; paused = false;
+  explosion(p, true); explosion(player.pos.clone().setY(1), true); dustBurst(player.pos, 40, 4);
+  sfx.boom(true); shake = 1.6;
+  for (const e of enemies) scene.remove(e.obj);
+  enemies = [];
+  document.body.classList.remove('danger');
+  hudVisible(false);
+  if (document.pointerLockElement) document.exitPointerLock();
+}
+function updateDeath(dt) {
+  deadT += dt;
+  const k = easeOut(deadT / .7);
+  soldier.root.rotation.set(-Math.PI / 2 * k, player.yaw + Math.PI, 0, 'YXZ');
+  if (deadT > 2 && deadT - dt <= 2) showGameOver();
+}
+function showGameOver() {
+  cardQ.length = 0; $('card').classList.remove('show');
+  const acc = shots ? Math.round(hits / shots * 100) : 0;
+  $('goStats').innerHTML = `生存時間 <b>${fmtTime(elapsed)}</b><br>撃ち抜いた地上絵 <b>${cleared} / ${glyphObjs.length}</b>　命中率 <b>${acc}%</b>　迎撃 <b>${intercepts}</b>`;
+  fillGallery($('goGallery'), order);
+  show('gameover');
 }
 
 function riseGlyph(g) {
@@ -965,7 +1077,7 @@ function updateCamera(dt) {
 const hud = document.getElementById('hud');
 const hctx = hud.getContext('2d');
 const $ = id => document.getElementById(id);
-const el = { time: $('hTime'), count: $('hCount'), acc: $('hAcc'), miss: $('hMiss'), elev: $('hElev'), az: $('hAz'), lock: $('lockTag'), rel: $('reloadBar'), msg: $('msg'), cross: $('cross') };
+const el = { time: $('hTime'), count: $('hCount'), acc: $('hAcc'), miss: $('hMiss'), elev: $('hElev'), az: $('hAz'), lock: $('lockTag'), rel: $('reloadBar'), msg: $('msg'), cross: $('cross'), warn: $('warn') };
 function fmtTime(t) { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(1).padStart(4, '0')}`; }
 const DIRS = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'];
 function azimuth() { let a = (-player.yaw / DEG) % 360; if (a < 0) a += 360; return a; }
@@ -1023,6 +1135,25 @@ function drawHUD() {
     hctx.beginPath(); hctx.moveTo(16, 0); hctx.lineTo(-8, -11); hctx.lineTo(-3, 0); hctx.lineTo(-8, 11); hctx.closePath(); hctx.fill();
     hctx.restore();
   }
+  // 敵ミサイルの方向
+  for (const e of enemies) {
+    const p = e.pos.clone().project(camera), behind = p.z > 1;
+    let x = p.x, y = p.y; if (behind) { x = -x; y = -y; }
+    const blink = Math.sin(time * 20) > 0 ? 1 : .45;
+    if (!behind && Math.abs(x) < .95 && Math.abs(y) < .9) {
+      const sx = (x + 1) / 2 * W, sy = (1 - y) / 2 * H;
+      hctx.strokeStyle = `rgba(255,50,40,${blink})`; hctx.lineWidth = 2.5;
+      hctx.beginPath(); hctx.arc(sx, sy, 16, 0, Math.PI * 2); hctx.stroke();
+      hctx.beginPath(); hctx.moveTo(sx - 24, sy); hctx.lineTo(sx - 10, sy); hctx.moveTo(sx + 10, sy); hctx.lineTo(sx + 24, sy); hctx.stroke();
+      continue;
+    }
+    const a = Math.atan2(-y, x), m = 60, cx = W / 2, cy = H / 2;
+    const k = Math.min((cx - m) / Math.abs(Math.cos(a) || 1e-6), (cy - m) / Math.abs(Math.sin(a) || 1e-6));
+    hctx.save(); hctx.translate(cx + Math.cos(a) * k, cy + Math.sin(a) * k); hctx.rotate(a);
+    hctx.fillStyle = `rgba(255,45,35,${blink})`;
+    hctx.beginPath(); hctx.moveTo(26, 0); hctx.lineTo(-10, -18); hctx.lineTo(-2, 0); hctx.lineTo(-10, 18); hctx.closePath(); hctx.fill();
+    hctx.restore();
+  }
   // レーダー
   const R = clamp(Math.min(W, H) * .15, 38, 78), rx = W - R - 12, ry = R + 12 + (W < 600 ? 64 : 0), range = 520;
   hctx.save();
@@ -1045,6 +1176,7 @@ function drawHUD() {
     else if (g.state === 'ground') { hctx.fillStyle = 'rgba(255,240,220,.45)'; hctx.beginPath(); hctx.arc(x, y, 2.2, 0, Math.PI * 2); hctx.fill(); }
     else { const pulse = 4 + Math.sin(time * 8) * 1.5; hctx.fillStyle = g === locked ? '#ff3b2f' : '#ffb347'; hctx.beginPath(); hctx.arc(x, y, pulse, 0, Math.PI * 2); hctx.fill(); }
   }
+  for (const e of enemies) { const [x, y] = toR(e.pos.x, e.pos.z); hctx.fillStyle = '#ff2d20'; hctx.fillRect(x - 3, y - 3, 6, 6); }
   hctx.restore();
   hctx.fillStyle = '#fff'; hctx.beginPath(); hctx.moveTo(rx, ry - 5); hctx.lineTo(rx - 4, ry + 4); hctx.lineTo(rx + 4, ry + 4); hctx.fill();
   // 方位N
@@ -1085,12 +1217,13 @@ function computeScore() {
   const acc = shots ? hits / shots : 0;
   const parts = [
     ['撃破ボーナス', `${cleared} 体 × 1,000`, cleared * 1000],
-    ['タイムボーナス', `${fmtTime(elapsed)}（10分から短縮した秒 × 40）`, Math.max(0, Math.round((600 - elapsed) * 40))],
+    ['タイムボーナス', `${fmtTime(elapsed)}（15分から短縮した秒 × 40）`, Math.max(0, Math.round((900 - elapsed) * 40))],
     ['命中率ボーナス', `${Math.round(acc * 100)}%（${hits}/${shots} 発）`, Math.round(acc * acc * 15000)],
+    ['迎撃ボーナス', `敵ミサイル撃墜 ${intercepts} 発 × 800`, intercepts * 800],
     ['取り逃がしペナルティ', `地面に戻った ${returns} 回 × −500`, -returns * 500],
   ];
   const total = Math.max(0, parts.reduce((s, p) => s + p[2], 0));
-  const rank = total >= 45000 ? 'S' : total >= 37000 ? 'A' : total >= 29000 ? 'B' : total >= 20000 ? 'C' : 'D';
+  const rank = total >= 62000 ? 'S' : total >= 52000 ? 'A' : total >= 42000 ? 'B' : total >= 30000 ? 'C' : 'D';
   return { parts, total, rank, acc };
 }
 function finish() {
@@ -1114,7 +1247,7 @@ function finish() {
 // ============================================================
 //  画面切り替え
 // ============================================================
-function show(id) { for (const s of ['title', 'howto', 'result', 'pause', 'gallery']) $(s).classList.toggle('hidden', s !== id); }
+function show(id) { for (const s of ['title', 'howto', 'result', 'pause', 'gallery', 'gameover']) $(s).classList.toggle('hidden', s !== id); }
 function hudVisible(v) { document.body.classList.toggle('playing', v); }
 function fillGallery(container, list) {
   container.replaceChildren(...list.map((def, i) => {
@@ -1143,6 +1276,8 @@ $('galleryBtn').onclick = () => { fillGallery($('gList'), GLYPHS); show('gallery
 $('galleryBack').onclick = () => show(state === 'result' ? 'result' : 'title');
 $('rGalleryAll').onclick = () => { fillGallery($('gList'), GLYPHS); show('gallery'); };
 $('titleBtn').onclick = () => { state = 'title'; show('title'); };
+$('goRetry').onclick = startGame;
+$('goTitle').onclick = () => { resetGame(); state = 'title'; show('title'); };
 $('pause').onclick = () => { requestLock(); };
 
 // ============================================================
@@ -1281,6 +1416,8 @@ const sfx = {
   thud() { noise(.6, 400, 60, .35); },
   rumble(d) { const v = clamp(1 - d / 600, .08, .6); noise(1.6, 220, 60, v); tone(45, 1.4, v * .6, 'sine', 30); },
   step(k) { noise(.06, 900 + k * 400, 300, .05 + .05 * k, 'bandpass', 1.2); },
+  enemyLaunch(d) { const v = clamp(1 - d / 700, .15, .7); noise(1.2, 2500, 300, v, 'bandpass', .8); tone(110, .4, v * .5, 'sawtooth', 55); },
+  alarm(d) { tone(d < 90 ? 1400 : 1000, .06, .09, 'square'); },
   chime() { [880, 1108, 1318].forEach((f, i) => tone(f, .45, .1, 'triangle', null, .25 + i * .09)); },
 };
 function setSeeker(mode) {
@@ -1432,7 +1569,7 @@ let last = performance.now();
 function loop(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   update(dt);
-  if (state !== 'play') { // タイトル中：兵士は待機姿勢
+  if (state !== 'play' && state !== 'dead') { // タイトル中：兵士は待機姿勢
     soldier.root.position.copy(player.pos); soldier.root.rotation.y = player.yaw + Math.PI;
     soldier.aim.rotation.x = -(12 * DEG + Math.sin(time * .8) * .03);
   }
@@ -1447,4 +1584,4 @@ for (const g of glyphObjs.slice(0, 5)) {
 }
 document.body.classList.add('ready');
 requestAnimationFrame(loop);
-window.__nazka = { get state() { return state; }, glyphObjs, player, fire, step(sec) { for (let t = 0; t < sec; t += 1 / 30) { update(1 / 30); updateCamera(1 / 30); } }, get missiles() { return missiles; }, camera, finish: () => { cleared = glyphObjs.length; finish(); } };
+window.__nazka = { get state() { return state; }, glyphObjs, player, fire, step(sec) { for (let t = 0; t < sec; t += 1 / 30) { update(1 / 30); updateCamera(1 / 30); } }, get missiles() { return missiles; }, get enemies() { return enemies; }, launchEnemy, keys, camera, finish: () => { cleared = glyphObjs.length; finish(); } };
