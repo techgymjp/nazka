@@ -1228,12 +1228,6 @@ const endTouch = e => {
 canvas.addEventListener('touchend', endTouch); canvas.addEventListener('touchcancel', endTouch);
 $('fireBtn').addEventListener('touchstart', e => { e.preventDefault(); initAudio(); fire(); }, { passive: false });
 $('fireBtn').addEventListener('click', () => fire());
-for (const [id, d] of [['elUp', 1], ['elDn', -1]]) {
-  const b = $(id); let iv = null;
-  const go = e => { e.preventDefault(); clearInterval(iv); iv = setInterval(() => { player.pitch = clamp(player.pitch + d * DEG, -15 * DEG, 70 * DEG); }, 30); };
-  b.addEventListener('touchstart', go, { passive: false });
-  b.addEventListener('touchend', () => clearInterval(iv)); b.addEventListener('touchcancel', () => clearInterval(iv));
-}
 if (IS_TOUCH) document.body.classList.add('touch');
 window.addEventListener('touchstart', () => document.body.classList.add('touch'), { once: true, passive: true });
 window.addEventListener('pointerdown', () => initAudio(), { once: true });
