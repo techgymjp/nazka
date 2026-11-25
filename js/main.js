@@ -1083,7 +1083,7 @@ const DIRS = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'
 function azimuth() { let a = (-player.yaw / DEG) % 360; if (a < 0) a += 360; return a; }
 
 function drawHUD() {
-  const W = hud.clientWidth, H = hud.clientHeight;
+  const W = hud.width / devicePixelRatio, H = hud.height / devicePixelRatio;
   hctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   hctx.clearRect(0, 0, W, H);
   if (state !== 'play') return;
@@ -1556,14 +1556,19 @@ $('muteBtn').onclick = e => { e.stopPropagation(); toggleMute(); };
 //  ループ
 // ============================================================
 function resize() {
-  const w = innerWidth, h = innerHeight;
-  renderer.setSize(w, h, false);
+  const vv = window.visualViewport;
+  const w = Math.round(vv ? vv.width : innerWidth), h = Math.round(vv ? vv.height : innerHeight);
+  renderer.setSize(w, h, true);                        // 表示サイズと描画サイズを一致させる（縦横比のゆがみ防止）
+  hud.style.width = `${w}px`; hud.style.height = `${h}px`;
   camera.aspect = w / h; camera.updateProjectionMatrix();
   hud.width = w * devicePixelRatio; hud.height = h * devicePixelRatio;
   const sc = h * renderer.getPixelRatio() / (2 * Math.tan(camera.fov * DEG / 2));
   smoke.mat.uniforms.scale.value = sc; flames.mat.uniforms.scale.value = sc;
 }
-addEventListener('resize', resize); resize();
+addEventListener('resize', resize);
+addEventListener('orientationchange', () => setTimeout(resize, 200));
+if (window.visualViewport) visualViewport.addEventListener('resize', resize);
+resize();
 
 let last = performance.now();
 function loop(now) {
