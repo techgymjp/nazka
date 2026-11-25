@@ -59,6 +59,9 @@
   #reloadBar { height:100%; width:100%; background:#bfae8a }
   #reload.ready #reloadBar { background:var(--glow) }
   #msg { position:fixed; left:50%; top:22%; transform:translateX(-50%); font-weight:700; font-size:16px; opacity:0; transition:opacity .25s; pointer-events:none; text-shadow:0 1px 4px #000; text-align:center; padding:0 12px }
+  #hint { position:fixed; left:50%; bottom:82px; transform:translateX(-50%); background:rgba(20,12,6,.6); border:1px solid rgba(255,220,170,.3); border-radius:999px;
+    padding:8px 16px; font-size:14px; white-space:nowrap; opacity:0; transition:opacity .5s; pointer-events:none }
+  #hint.show { opacity:1 } #hint .sp { display:none } body.touch #hint .sp { display:inline } body.touch #hint .pc { display:none } body.touch #hint { bottom:auto; top:96px; font-size:12px }
   #msg.show { opacity:1 } #msg.warn { color:#ff9a85 }
   #card { position:fixed; left:14px; bottom:84px; width:min(360px,calc(100vw - 28px)); display:flex; gap:12px; align-items:center; padding:10px 12px;
     background:linear-gradient(135deg,#f4e3c2,#e3c99b); color:#3a2614; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.45);
@@ -111,6 +114,7 @@
   <div id="reload"><div id="reloadBar"></div></div>
 </div>
 <div id="msg"></div>
+<div id="hint" class="hudui"><span class="pc"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動　<kbd>Shift</kbd> ダッシュ　マウス 照準・仰角　クリック 発射</span><span class="sp">左側ドラッグで移動　右側ドラッグで照準　▲▼で仰角　FIREで発射</span></div>
 <div id="card"><div class="thumb"></div><div><div class="no"></div><div class="name"></div><div class="desc"></div></div></div>
 <div id="touchUI">
   <div id="joy"><div id="knob"></div></div>
@@ -124,19 +128,29 @@
 <div id="title" class="overlay">
   <div class="panel">
     <h1><small>NAZCA × STINGER</small>ナスカの地上絵を<br>スティンガー砲で</h1>
-    <p class="lead">ペルー・ナスカ平原。砂漠に描かれた地上絵が、次々と<b>垂直に立ち上がる</b>！<br>
+    <div class="btns" style="margin-top:28px"><button id="startBtn">出撃する</button></div>
+    <div class="btns" style="margin-top:14px"><button id="howtoBtn" class="sub">遊び方</button><button id="galleryBtn" class="sub">地上絵図鑑</button></div>
+  </div>
+</div>
+
+<!-- 遊び方 -->
+<div id="howto" class="overlay hidden">
+  <div class="panel">
+    <h2>遊び方</h2>
+    <p class="lead">ペルー・ナスカ平原。砂漠に描かれた地上絵が、地面ごと次々と<b>垂直に立ち上がる</b>！<br>
       倒れて地上絵に戻る前に、スティンガーで撃ち抜け。全19体を撃ち抜くまでのタイムと腕前を競おう。</p>
     <ul class="howto">
-      <li><b>移動</b>：<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>（<kbd>Shift</kbd>でダッシュ）</li>
+      <li><b>移動</b>：<kbd>W</kbd>前 <kbd>S</kbd>後 <kbd>A</kbd>左 <kbd>D</kbd>右（<kbd>Shift</kbd>でダッシュ）— 走り回って好位置を取ろう</li>
       <li><b>照準</b>：マウスで方位と<b>仰角</b>を調整（<kbd>↑</kbd><kbd>↓</kbd>・ホイールで微調整）</li>
-      <li><b>発射</b>：クリック / <kbd>Space</kbd>　地上絵の線に照準を合わせると<b>ロックオン</b>して誘導</li>
+      <li><b>発射</b>：クリック / <kbd>Space</kbd>　地上絵に照準を合わせると<b>ロックオン</b>して誘導</li>
       <li>地上絵は一定時間で<b>倒れて地面に戻る</b>（取り逃がし＝減点）</li>
       <li>スコア＝撃破数＋タイム＋命中率−取り逃がし</li>
       <li class="tch">スマホ：左側ドラッグで移動、右側ドラッグで照準、▲▼で仰角、FIREで発射</li>
+      <li><kbd>Esc</kbd>で一時停止、<kbd>M</kbd>で消音</li>
     </ul>
-    <div class="btns"><button id="startBtn">出撃する</button><button id="galleryBtn" class="sub">地上絵図鑑</button></div>
     <p class="note">登場する地上絵はすべて実在するナスカの地上絵がモチーフです（線画は簡略化した再現）。<br>
       本物の地上絵は1994年に世界遺産に登録された大切な文化財。立ち上がるのはゲームの中だけ！</p>
+    <div class="btns" style="margin-top:16px"><button id="howtoStart">出撃する</button><button id="howtoBack" class="sub">もどる</button></div>
   </div>
 </div>
 
