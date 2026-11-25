@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>ナスカの地上絵をスティンガー砲で</title>
+<meta name="description" content="ペルー・ナスカの砂漠で、垂直に立ち上がる実在の地上絵をスティンガーで撃ち抜く3Dシューティング。">
+<style>
+  :root { --glow:#ffcf8a; --ink:#2b1d12; --red:#ff3b2f; }
+  * { box-sizing:border-box; margin:0; padding:0 }
+  html,body { height:100%; overflow:hidden; background:#1a120b; color:#fff3d6;
+    font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif; -webkit-user-select:none; user-select:none }
+  #scene,#hud { position:fixed; inset:0; width:100vw; height:100vh; display:block }
+  #scene { touch-action:none }
+  #hud { pointer-events:none }
+  .hidden { display:none !important }
+  #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#1a120b; z-index:50; font-size:18px; letter-spacing:.2em }
+  body.ready #loading { display:none }
+
+  /* オーバーレイ */
+  .overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:16px; z-index:10;
+    background:radial-gradient(ellipse at center, rgba(30,18,8,.35), rgba(10,6,3,.82)); overflow:auto }
+  .panel { max-width:640px; width:100%; text-align:center; margin:auto }
+  h1 { font-size:clamp(26px,6.2vw,50px); letter-spacing:.05em; line-height:1.2; text-shadow:0 0 18px rgba(255,190,110,.55),0 3px 0 #6b4220 }
+  h1 small { display:block; font-size:.36em; letter-spacing:.35em; opacity:.85; margin-bottom:8px }
+  .lead { margin:16px 0 12px; font-size:clamp(14px,3.5vw,16px); line-height:1.75 }
+  .howto { text-align:left; margin:0 auto 18px; max-width:520px; background:rgba(255,230,190,.08); border:1px solid rgba(255,210,150,.25);
+    border-radius:10px; padding:12px 16px; font-size:clamp(12.5px,3.2vw,14.5px); line-height:1.75 }
+  .howto li { list-style:none } .howto li::before { content:"▸ "; color:var(--glow) }
+  kbd { display:inline-block; padding:0 6px; border:1px solid rgba(255,230,190,.5); border-radius:4px; font-size:.9em; font-family:inherit; background:rgba(0,0,0,.25) }
+  .btns { display:flex; gap:12px; justify-content:center; flex-wrap:wrap }
+  button { font:inherit; font-size:18px; font-weight:bold; letter-spacing:.08em; color:var(--ink); cursor:pointer; border:none; border-radius:999px; padding:13px 34px;
+    background:linear-gradient(#ffd99a,#e6a65a); box-shadow:0 4px 0 #8a5426,0 0 22px rgba(255,190,110,.4) }
+  button.sub { background:rgba(255,230,190,.12); color:#fff3d6; box-shadow:none; border:1px solid rgba(255,230,190,.4) }
+  button:active { transform:translateY(2px) }
+  .note { font-size:12px; opacity:.65; margin-top:14px; line-height:1.6 }
+
+  /* HUD */
+  .hudui { display:none }
+  body.playing .hudui { display:block }
+  #stats { position:fixed; left:14px; top:12px; font-size:14px; line-height:1.5; text-shadow:0 1px 3px #000; pointer-events:none }
+  #stats .big { font-size:28px; font-weight:800; letter-spacing:.04em; font-variant-numeric:tabular-nums }
+  #stats span b { color:var(--glow); font-variant-numeric:tabular-nums }
+  #cross { position:fixed; left:50%; top:50%; width:46px; height:46px; margin:-23px 0 0 -23px; pointer-events:none }
+  #cross::before,#cross::after { content:""; position:absolute; background:#fff3d6; box-shadow:0 0 2px #000 }
+  #cross::before { left:22px; top:0; width:2px; height:46px; clip-path:polygon(0 0,100% 0,100% 38%,0 38%,0 62%,100% 62%,100% 100%,0 100%) }
+  #cross::after { top:22px; left:0; height:2px; width:46px; clip-path:polygon(0 0,38% 0,38% 100%,0 100%,0 0,62% 0,100% 0,100% 100%,62% 100%) }
+  #cross i { position:absolute; inset:9px; border:2px solid rgba(255,243,214,.85); border-radius:50% }
+  #cross.seek i { border-color:#ffd166; animation:pulse .25s infinite alternate }
+  #cross.locked i { border-color:var(--red); border-radius:2px; transform:rotate(45deg) }
+  #cross.locked::before,#cross.locked::after { background:var(--red) }
+  @keyframes pulse { to { transform:scale(.8) } }
+  #lockTag { position:fixed; left:50%; top:calc(50% + 34px); transform:translateX(-50%); font-weight:800; font-size:14px; letter-spacing:.08em; text-shadow:0 1px 3px #000; pointer-events:none; white-space:nowrap }
+  #lockTag.on { color:var(--red) } #lockTag.seek { color:#ffd166 }
+  #gauge { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); text-align:center; pointer-events:none; text-shadow:0 1px 3px #000 }
+  #gauge .row { display:flex; gap:22px; justify-content:center; font-size:13px; opacity:.9 }
+  #gauge .row b { font-size:20px; color:var(--glow); font-variant-numeric:tabular-nums; margin-left:4px }
+  #reload { width:180px; height:6px; background:rgba(0,0,0,.45); border-radius:3px; margin:6px auto 0; overflow:hidden }
+  #reloadBar { height:100%; width:100%; background:#bfae8a }
+  #reload.ready #reloadBar { background:var(--glow) }
+  #msg { position:fixed; left:50%; top:22%; transform:translateX(-50%); font-weight:700; font-size:16px; opacity:0; transition:opacity .25s; pointer-events:none; text-shadow:0 1px 4px #000; text-align:center; padding:0 12px }
+  #msg.show { opacity:1 } #msg.warn { color:#ff9a85 }
+  #card { position:fixed; left:14px; bottom:84px; width:min(360px,calc(100vw - 28px)); display:flex; gap:12px; align-items:center; padding:10px 12px;
+    background:linear-gradient(135deg,#f4e3c2,#e3c99b); color:#3a2614; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.45);
+    transform:translateX(-120%); transition:transform .35s cubic-bezier(.2,.9,.3,1.2); pointer-events:none; z-index:5 }
+  #card.show { transform:none }
+  #card .thumb canvas { width:72px; height:72px; background:#d9bb8a; border-radius:6px; display:block }
+  #card .no { font-size:11px; opacity:.7 } #card .name { font-size:20px; font-weight:800 } #card .desc { font-size:12.5px; line-height:1.5 }
+  #muteBtn { position:fixed; right:12px; bottom:12px; padding:6px 10px; font-size:16px; z-index:20; background:rgba(0,0,0,.35); color:#fff; box-shadow:none; border:1px solid rgba(255,230,190,.3) }
+
+  /* タッチ操作 */
+  #touchUI { display:none }
+  body.touch.playing #touchUI { display:block }
+  #joy { position:fixed; width:110px; height:110px; margin:-55px 0 0 -55px; border-radius:50%; border:2px solid rgba(255,240,220,.35); background:rgba(0,0,0,.15); opacity:0; pointer-events:none; left:90px; top:calc(100% - 120px) }
+  #joy.on { opacity:1 } #knob { position:absolute; left:30px; top:30px; width:50px; height:50px; border-radius:50%; background:rgba(255,230,190,.55) }
+  #fireBtn { position:fixed; right:22px; bottom:70px; width:86px; height:86px; border-radius:50%; padding:0; font-size:16px; background:radial-gradient(#ff7a5a,#c8321e); color:#fff; box-shadow:0 4px 0 #6d1a0d; z-index:6 }
+  .elBtn { position:fixed; right:122px; width:52px; height:44px; border-radius:10px; padding:0; font-size:18px; z-index:6; background:rgba(0,0,0,.35); color:#fff; box-shadow:none; border:1px solid rgba(255,230,190,.4) }
+  #elUp { bottom:128px } #elDn { bottom:76px }
+  body.touch #gauge { bottom:12px } body.touch #card { bottom:auto; top:120px }
+
+  /* リザルト */
+  .rank { font-size:72px; font-weight:900; line-height:1; margin:8px 0 }
+  .rS { color:#ffe36e; text-shadow:0 0 24px #ffb700 } .rA { color:#ffb36e } .rB { color:#c8e0ff } .rC,.rD { color:#d6c7b0 }
+  .total { font-size:40px; font-weight:800; color:var(--glow); font-variant-numeric:tabular-nums }
+  table { margin:12px auto; border-collapse:collapse; font-size:14px; width:100%; max-width:560px }
+  th,td { padding:6px 8px; border-bottom:1px solid rgba(255,230,190,.18); text-align:left }
+  td:last-child { text-align:right; font-weight:700; font-variant-numeric:tabular-nums } td.neg { color:#ff9a85 }
+  .gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:10px; margin:14px 0; text-align:left }
+  .gcard { display:flex; gap:10px; background:rgba(255,230,190,.08); border:1px solid rgba(255,210,150,.2); border-radius:8px; padding:8px }
+  .gcard canvas { width:64px; height:64px; flex:none; background:#e2c597; border-radius:6px }
+  .gcard b { font-size:15px } .gcard p { font-size:12px; line-height:1.5; opacity:.9; margin-top:2px }
+  .wide { max-width:900px }
+  h2 { font-size:24px; margin-bottom:6px }
+</style>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<div id="loading">LOADING…</div>
+<canvas id="scene"></canvas>
+<canvas id="hud"></canvas>
+
+<!-- HUD -->
+<div id="stats" class="hudui">
+  <div class="big" id="hTime">0:00.0</div>
+  <span>撃破 <b id="hCount">0 / 0</b></span>　<span>命中率 <b id="hAcc">—</b></span>　<span>取り逃がし <b id="hMiss">0</b></span>
+</div>
+<div id="cross" class="hudui"><i></i></div>
+<div id="lockTag" class="hudui"></div>
+<div id="gauge" class="hudui">
+  <div class="row"><span>仰角<b id="hElev">+0.0°</b></span><span>方位<b id="hAz">000°</b></span></div>
+  <div id="reload"><div id="reloadBar"></div></div>
+</div>
+<div id="msg"></div>
+<div id="card"><div class="thumb"></div><div><div class="no"></div><div class="name"></div><div class="desc"></div></div></div>
+<div id="touchUI">
+  <div id="joy"><div id="knob"></div></div>
+  <button id="elUp" class="elBtn">▲</button>
+  <button id="elDn" class="elBtn">▼</button>
+  <button id="fireBtn">FIRE</button>
+</div>
+<button id="muteBtn">🔊</button>
+
+<!-- タイトル -->
+<div id="title" class="overlay">
+  <div class="panel">
+    <h1><small>NAZCA × STINGER</small>ナスカの地上絵を<br>スティンガー砲で</h1>
+    <p class="lead">ペルー・ナスカ平原。砂漠に描かれた地上絵が、次々と<b>垂直に立ち上がる</b>！<br>
+      倒れて地上絵に戻る前に、スティンガーで撃ち抜け。全19体を撃ち抜くまでのタイムと腕前を競おう。</p>
+    <ul class="howto">
+      <li><b>移動</b>：<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>（<kbd>Shift</kbd>でダッシュ）</li>
+      <li><b>照準</b>：マウスで方位と<b>仰角</b>を調整（<kbd>↑</kbd><kbd>↓</kbd>・ホイールで微調整）</li>
+      <li><b>発射</b>：クリック / <kbd>Space</kbd>　地上絵の線に照準を合わせると<b>ロックオン</b>して誘導</li>
+      <li>地上絵は一定時間で<b>倒れて地面に戻る</b>（取り逃がし＝減点）</li>
+      <li>スコア＝撃破数＋タイム＋命中率−取り逃がし</li>
+      <li class="tch">スマホ：左側ドラッグで移動、右側ドラッグで照準、▲▼で仰角、FIREで発射</li>
+    </ul>
+    <div class="btns"><button id="startBtn">出撃する</button><button id="galleryBtn" class="sub">地上絵図鑑</button></div>
+    <p class="note">登場する地上絵はすべて実在するナスカの地上絵がモチーフです（線画は簡略化した再現）。<br>
+      本物の地上絵は1994年に世界遺産に登録された大切な文化財。立ち上がるのはゲームの中だけ！</p>
+  </div>
+</div>
+
+<!-- 一時停止 -->
+<div id="pause" class="overlay hidden"><div class="panel"><h2>一時停止中</h2><p class="lead">クリックで再開</p></div></div>
+
+<!-- 図鑑 -->
+<div id="gallery" class="overlay hidden">
+  <div class="panel wide">
+    <h2>ナスカの地上絵 図鑑</h2>
+    <p class="note" style="margin-top:0">紀元前後〜紀元700年ごろのナスカ文化の人々が、地表の赤黒い石を取り除いて下の明るい地面を出すことで描いたと考えられています。</p>
+    <div class="gallery" id="gList"></div>
+    <button id="galleryBack" class="sub">もどる</button>
+  </div>
+</div>
+
+<!-- リザルト -->
+<div id="result" class="overlay hidden">
+  <div class="panel wide">
+    <h2>全地上絵 撃ち抜き完了！</h2>
+    <div id="rRank" class="rank">A</div>
+    <div class="total" id="rTotal">0</div>
+    <div class="note" id="rBest" style="margin-top:4px"></div>
+    <table id="rTable"></table>
+    <h2 style="margin-top:16px;font-size:18px">撃ち抜いた順の地上絵</h2>
+    <div class="gallery" id="rGallery"></div>
+    <div class="btns"><button id="retryBtn">もう一度</button><button id="rGalleryAll" class="sub">図鑑</button><button id="titleBtn" class="sub">タイトルへ</button></div>
+  </div>
+</div>
+
+<noscript>このゲームを遊ぶには JavaScript を有効にしてください。</noscript>
+<script type="module" src="./js/main.js"></script>
+<script>
+  window.addEventListener('error', e => { const l = document.getElementById('loading'); if (l && !document.body.classList.contains('ready')) l.textContent = '読み込みに失敗しました：' + e.message; });
+  if (!('ontouchstart' in window) && !matchMedia('(pointer: coarse)').matches) document.querySelectorAll('.tch').forEach(e => e.remove());
+</script>
+</body>
+</html>
