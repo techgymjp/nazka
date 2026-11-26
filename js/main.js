@@ -1297,7 +1297,7 @@ function resumeGame() { if (state !== 'play') return; paused = false; show(null)
 
 // シェア（アプリでは Android の共有メニュー、Web では共有 API かコピー）
 let shareText = '';
-const SHARE_URL = 'https://techgymjp.github.io/nazka/';
+const SHARE_URL = 'https://techgym.jp/column/claude-code-game-nazka/';
 async function share() {
   const nativeShare = plugin('Share');
   try {
@@ -1505,49 +1505,141 @@ window.addEventListener('keydown', () => initAudio(), { once: true });
 // ============================================================
 //  サウンド
 // ============================================================
-let AC = null, master = null, seekOsc = null, seekGain = null, noiseBuf = null, muted = false;
+let AC = null, master = null, seekOsc = null, seekGain = null, muted = false;
+// 音はすべてゲーム開始前に OfflineAudioContext で音声データに書き出しておき、プレイ中は再生するだけにする。
+// （その場で合成すると、3D の描画が重いときにタイミングがずれて途切れたり、処理が追いつかずにビリついたりするため）
+const SND = { ready: false, buf: {}, music: null };
+let X = null;   // 書き出し中の合成先 { ctx, out, noise, bgm, rev }
+let music = null, musicMode = null;
+function makeNoiseBuf(ctx) {
+  const b = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return b;
+}
 function initAudio() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   try {
-    AC = new (window.AudioContext || window.webkitAudioContext)();
+    const C = window.AudioContext || window.webkitAudioContext;
+    try { AC = new C({ latencyHint: 'balanced' }); } catch (e) { AC = new C(); }
     master = AC.createGain(); master.gain.value = muted ? 0 : .55; master.connect(AC.destination);
+    // ロックオンのシーカー音だけは、照準に合わせて音程を変えるのでその場で鳴らす（発振器 1 つだけ）
     seekOsc = AC.createOscillator(); seekOsc.type = 'square'; seekOsc.frequency.value = 600;
     seekGain = AC.createGain(); seekGain.gain.value = 0;
     const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
     seekOsc.connect(lp).connect(seekGain).connect(master); seekOsc.start();
-    noiseBuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
-    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    bgmStart();
+    startMusic();
   } catch (e) { AC = null; }
 }
-function noise(dur, f0, f1, vol, type = 'lowpass', q = 1, delay = 0) {
-  if (!AC) return;
-  const t = AC.currentTime + delay, src = AC.createBufferSource(); src.buffer = noiseBuf;
-  const f = AC.createBiquadFilter(); f.type = type; f.Q.value = q;
-  f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur);
-  const g = AC.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
-  src.connect(f).connect(g).connect(master); src.start(t); src.stop(t + dur + .05);
-}
-function tone(freq, dur, vol, type = 'sine', f1, delay = 0) {
-  if (!AC) return;
-  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
-  o.type = type; o.frequency.setValueAtTime(freq, t);
-  if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
-  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
-  o.connect(g).connect(master); o.start(t); o.stop(t + dur + .05);
+// 書き出した効果音を鳴らす
+function play(name, vol = 1, rate = 1) {
+  const b = SND.buf[name];
+  if (!AC || !b || AC.state !== 'running') return;
+  const src = AC.createBufferSource(), g = AC.createGain();
+  src.buffer = b; src.playbackRate.value = rate; g.gain.value = vol;
+  src.connect(g).connect(master); src.start();
 }
 const sfx = {
-  launch() { noise(.15, 900, 200, .7); noise(1.4, 3500, 500, .55, 'bandpass', .7, .2); tone(70, .3, .5, 'sine', 35); },
-  boom(big) { noise(big ? 2 : 1.2, 1500, 40, big ? 1 : .7); tone(80, .7, .5, 'sine', 25); },
-  empty() { tone(260, .07, .15, 'square'); },
-  lock() { tone(1650, .05, .08, 'square'); },
-  thud() { noise(.6, 400, 60, .35); },
-  rumble(d) { const v = clamp(1 - d / 600, .08, .6); noise(1.6, 220, 60, v); tone(45, 1.4, v * .6, 'sine', 30); },
-  step(k) { noise(.06, 900 + k * 400, 300, .05 + .05 * k, 'bandpass', 1.2); },
-  enemyLaunch(d) { const v = clamp(1 - d / 700, .15, .7); noise(1.2, 2500, 300, v, 'bandpass', .8); tone(110, .4, v * .5, 'sawtooth', 55); },
-  alarm(d) { tone(d < 90 ? 1400 : 1000, .06, .09, 'square'); },
-  chime() { [880, 1108, 1318].forEach((f, i) => tone(f, .45, .1, 'triangle', null, .25 + i * .09)); },
+  launch() { play('launch'); },
+  boom(big) { play(big ? 'boomBig' : 'boomSmall', 1, rand(.92, 1.08)); },
+  empty() { play('empty'); },
+  lock() { play('lock'); },
+  thud() { play('thud'); },
+  rumble(d) { play('rumble', clamp(1 - d / 600, .08, .6) / .6); },
+  step(k) { play('step', (.05 + .05 * k) / .075, rand(.85, 1.2)); },
+  enemyLaunch(d) { play('enemyLaunch', clamp(1 - d / 700, .15, .7) / .7); },
+  alarm(d) { play(d < 90 ? 'alarmHi' : 'alarmLo'); },
+  chime() { play('chime'); },
 };
+// 効果音の作り方（[長さ(秒), 合成]）
+const SFX_RECIPES = {
+  launch: [1.8, () => { noise(.15, 900, 200, .7); noise(1.4, 3500, 500, .55, 'bandpass', .7, .2); tone(70, .3, .5, 'sine', 35); }],
+  boomBig: [2.2, () => { noise(2, 1500, 40, 1); tone(80, .7, .5, 'sine', 25); }],
+  boomSmall: [1.4, () => { noise(1.2, 1500, 40, .7); tone(80, .7, .5, 'sine', 25); }],
+  empty: [.15, () => tone(260, .07, .15, 'square')],
+  lock: [.12, () => tone(1650, .05, .08, 'square')],
+  thud: [.7, () => noise(.6, 400, 60, .35)],
+  rumble: [1.7, () => { noise(1.6, 220, 60, .6); tone(45, 1.4, .36, 'sine', 30); }],
+  step: [.12, () => noise(.06, 1100, 300, .075, 'bandpass', 1.2)],
+  enemyLaunch: [1.4, () => { noise(1.2, 2500, 300, .7, 'bandpass', .8); tone(110, .4, .35, 'sawtooth', 55); }],
+  alarmHi: [.1, () => tone(1400, .06, .09, 'square')],
+  alarmLo: [.1, () => tone(1000, .06, .09, 'square')],
+  chime: [1.1, () => [880, 1108, 1318].forEach((f, i) => tone(f, .45, .1, 'triangle', null, .25 + i * .09))],
+};
+const RENDER_SR = 44100;
+async function renderOffline(sec, channels, fn) {
+  const oc = new OfflineAudioContext(channels, Math.ceil(sec * RENDER_SR), RENDER_SR);
+  const out = oc.createGain(); out.connect(oc.destination);
+  X = { ctx: oc, out, noise: makeNoiseBuf(oc), bgm: out, rev: null };
+  try { fn(oc); } finally { X = null; }
+  return oc.startRendering();
+}
+// BGM を 16 小節ぶん書き出す。残響のはみ出しは頭に重ねて、つなぎ目なくループさせる
+const BGM_BARS = 16;
+async function renderMusic(full, songs) {
+  const step = 60 / BGM.bpm / 4, len = BGM_BARS * 8 * step, tail = 3;
+  const buf = await renderOffline(len + tail, 2, oc => {
+    X.bgm = oc.createGain(); X.bgm.gain.value = .32; X.bgm.connect(X.out);
+    X.rev = oc.createConvolver(); X.rev.buffer = bgmImpulse(2.8);
+    const rg = oc.createGain(); rg.gain.value = .45; X.rev.connect(rg).connect(X.bgm);
+    // 砂漠の風（うねりの周期をループの長さにそろえる）
+    const w = oc.createBufferSource(); w.buffer = X.noise; w.loop = true;
+    const wf = oc.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 500; wf.Q.value = .6;
+    const lfo = oc.createOscillator(), lg = oc.createGain(); lfo.frequency.value = 2 / len; lg.gain.value = 300; lfo.connect(lg).connect(wf.frequency);
+    const wg = oc.createGain(); wg.gain.value = .07; w.connect(wf).connect(wg).connect(X.bgm);
+    w.start(0); w.stop(len); lfo.start(0); lfo.stop(len);
+    for (let i = 0; i < BGM_BARS * 8; i++) bgmStep(i, i * step, full, songs[Math.floor(i / 64) % songs.length]);
+  });
+  const n = Math.round(len * RENDER_SR);
+  const out = new AudioBuffer({ length: n, numberOfChannels: 2, sampleRate: RENDER_SR });
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c), o = new Float32Array(n);
+    o.set(d.subarray(0, n));
+    for (let i = 0; n + i < d.length && i < n; i++) o[i] += d[n + i];
+    out.copyToChannel(o, c);
+  }
+  return out;
+}
+// ページを開いたらすぐに書き出しを始め、終わるまで「出撃する」を押せないようにする
+async function prepareAudio() {
+  const total = Object.keys(SFX_RECIPES).length + 2;
+  let done = 0;
+  const tick = () => setLoading(++done / total);
+  setLoading(0); SND.t0 = performance.now();
+  try {
+    for (const [k, [sec, fn]] of Object.entries(SFX_RECIPES)) { SND.buf[k] = await renderOffline(sec, 1, fn); tick(); }
+    const songs = [makeSong(), makeSong()];
+    const calm = await renderMusic(false, songs); tick();
+    const full = await renderMusic(true, songs); tick();
+    SND.music = { calm, full };
+  } catch (e) { console.warn('sound prepare failed', e); }
+  SND.ready = true; SND.ms = performance.now() - SND.t0;
+  setLoading(1, true);
+  startMusic();
+}
+function setLoading(p, done) {
+  for (const id of ['startBtn', 'howtoStart']) {
+    const b = $(id); if (!b) continue;
+    b.disabled = !done;
+    b.textContent = done ? '出撃する' : `サウンドを準備中… ${Math.round(p * 100)}%`;
+  }
+}
+// BGM：静かな編成とプレイ中の編成を同時にループ再生し、場面に合わせて音量を入れ替える
+function startMusic() {
+  if (!AC || !SND.music || music) return;
+  const t0 = AC.currentTime + .1;
+  const mk = buf => { const src = AC.createBufferSource(), g = AC.createGain(); src.buffer = buf; src.loop = true; g.gain.value = 0; src.connect(g).connect(master); src.start(t0); return g; };
+  music = { calm: mk(SND.music.calm), full: mk(SND.music.full) };
+  musicMode = null; updateMusic();
+}
+function updateMusic() {
+  if (!music) return;
+  const mode = state === 'play' && !paused ? 'full' : 'calm';
+  if (mode === musicMode) return;
+  musicMode = mode;
+  const t = AC.currentTime;
+  music.calm.gain.setTargetAtTime(mode === 'calm' ? 1 : 0, t, .35);
+  music.full.gain.setTargetAtTime(mode === 'full' ? 1 : 0, t, .35);
+}
 function setSeeker(mode) {
   if (!AC) return;
   const t = AC.currentTime;
@@ -1555,10 +1647,24 @@ function setSeeker(mode) {
   else if (mode === 1) { seekOsc.frequency.setTargetAtTime(480 + Math.sin(t * 60) * 60, t, .01); seekGain.gain.setTargetAtTime(Math.sin(t * 50) > 0 ? .04 : .008, t, .005); }
   else seekGain.gain.setTargetAtTime(0, t, .03);
 }
+function noise(dur, f0, f1, vol, type = 'lowpass', q = 1, delay = 0) {
+    const t = X.ctx.currentTime + delay, src = X.ctx.createBufferSource(); src.buffer = X.noise;
+  const f = X.ctx.createBiquadFilter(); f.type = type; f.Q.value = q;
+  f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur);
+  const g = X.ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+  src.connect(f).connect(g).connect(X.out); src.start(t); src.stop(t + dur + .05);
+}
+function tone(freq, dur, vol, type = 'sine', f1, delay = 0) {
+    const t = X.ctx.currentTime + delay, o = X.ctx.createOscillator(), g = X.ctx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+  o.connect(g).connect(X.out); o.start(t); o.stop(t + dur + .05);
+}
 // ============================================================
 //  BGM：アンデス風（ケーナ・チャランゴ・ボンボ・チャフチャス）を自動生成
 // ============================================================
-const BGM = { on: false, step: 0, next: 0, bpm: 88, song: null, loops: 0 };
+const BGM = { bpm: 88 };
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 const CHORDS = { Am: [57, 60, 64, 69], C: [60, 64, 67, 72], G: [55, 59, 62, 67], Em: [52, 55, 59, 64], E: [52, 56, 59, 64], Dm: [50, 57, 62, 65] };
 const PROG = ['Am', 'Am', 'C', 'G', 'Am', 'Dm', 'E', 'Am'];
@@ -1584,80 +1690,57 @@ function makeSong() {
   return [A2, B, C, A]; // 8小節 = 4フレーズ
 }
 function bgmImpulse(sec) {
-  const len = AC.sampleRate * sec, b = AC.createBuffer(2, len, AC.sampleRate);
+  const len = X.ctx.sampleRate * sec, b = X.ctx.createBuffer(2, len, X.ctx.sampleRate);
   for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
   return b;
 }
-function bgmStart() {
-  if (!AC || BGM.on) return;
-  BGM.on = true;
-  BGM.out = AC.createGain(); BGM.out.gain.value = 0; BGM.out.connect(master);
-  BGM.out.gain.setTargetAtTime(.32, AC.currentTime, 1.5);
-  BGM.rev = AC.createConvolver(); BGM.rev.buffer = bgmImpulse(2.8);
-  const rg = AC.createGain(); rg.gain.value = .45; BGM.rev.connect(rg).connect(BGM.out);
-  // 砂漠の風
-  const w = AC.createBufferSource(); w.buffer = noiseBuf; w.loop = true;
-  const wf = AC.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 500; wf.Q.value = .6;
-  const lfo = AC.createOscillator(), lg = AC.createGain(); lfo.frequency.value = .07; lg.gain.value = 300; lfo.connect(lg).connect(wf.frequency); lfo.start();
-  const wg = AC.createGain(); wg.gain.value = .07; w.connect(wf).connect(wg).connect(BGM.out); w.start();
-  BGM.song = makeSong(); BGM.step = 0; BGM.next = AC.currentTime + .2;
-  setInterval(bgmSched, 25);
-}
-function bgmSched() {
-  if (!AC || AC.state !== 'running') return;
-  const st = 60 / BGM.bpm / 4;
-  while (BGM.next < AC.currentTime + .15) { bgmStep(BGM.step, BGM.next); BGM.next += st; BGM.step++; }
-}
 function bgmVoice(t, dur, freq, vol, type, cutoff, dest) {
-  const o = AC.createOscillator(), f = AC.createBiquadFilter(), g = AC.createGain();
+  const o = X.ctx.createOscillator(), f = X.ctx.createBiquadFilter(), g = X.ctx.createGain();
   o.type = type; o.frequency.value = freq;
   f.type = 'lowpass'; f.frequency.setValueAtTime(cutoff, t); f.frequency.exponentialRampToValueAtTime(Math.max(200, cutoff * .2), t + dur);
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .004); g.gain.exponentialRampToValueAtTime(.0005, t + dur);
-  o.connect(f).connect(g); g.connect(dest || BGM.out); o.start(t); o.stop(t + dur + .05);
+  o.connect(f).connect(g); g.connect(dest || X.bgm); o.start(t); o.stop(t + dur + .05);
   return g;
 }
 function charango(t, notes, vol, up) { // 複弦のかき鳴らし
   const ns = up ? [...notes].reverse() : notes;
   ns.forEach((m, i) => {
     const tt = t + i * .014, f = mtof(m + 12);
-    const g = bgmVoice(tt, .45, f, vol, 'sawtooth', 3200);
-    bgmVoice(tt + .003, .4, f * 1.004, vol * .6, 'sawtooth', 2600);
-    if (i === 0) g.connect(BGM.rev);
+    const g = bgmVoice(tt, .42, f, vol * 1.3, 'sawtooth', 3000);
+    if (i === 0) g.connect(X.rev);
   });
 }
 function quena(t, dur, m, vol) {
-  const f = mtof(m), o = AC.createOscillator(), o2 = AC.createOscillator(), g = AC.createGain();
+  const f = mtof(m), o = X.ctx.createOscillator(), o2 = X.ctx.createOscillator(), g = X.ctx.createGain();
   o.type = 'sine'; o2.type = 'triangle'; o.frequency.value = f; o2.frequency.value = f;
-  const vib = AC.createOscillator(), vg = AC.createGain(); vib.frequency.value = 5.2; vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(f * .012, t + Math.min(dur, .35));
+  const vib = X.ctx.createOscillator(), vg = X.ctx.createGain(); vib.frequency.value = 5.2; vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(f * .012, t + Math.min(dur, .35));
   vib.connect(vg); vg.connect(o.frequency); vg.connect(o2.frequency);
-  const g2 = AC.createGain(); g2.gain.value = .25; o2.connect(g2).connect(g); o.connect(g);
+  const g2 = X.ctx.createGain(); g2.gain.value = .25; o2.connect(g2).connect(g); o.connect(g);
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .06); g.gain.setValueAtTime(vol * .85, t + dur * .7); g.gain.linearRampToValueAtTime(0, t + dur + .08);
-  g.connect(BGM.out); g.connect(BGM.rev);
+  g.connect(X.bgm); g.connect(X.rev);
   // 息の音
-  const n = AC.createBufferSource(); n.buffer = noiseBuf; const nf = AC.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = f * 2; nf.Q.value = 3;
-  const ng = AC.createGain(); ng.gain.setValueAtTime(vol * .5, t); ng.gain.exponentialRampToValueAtTime(.001, t + .12);
-  n.connect(nf).connect(ng).connect(BGM.out);
+  const n = X.ctx.createBufferSource(); n.buffer = X.noise; const nf = X.ctx.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = f * 2; nf.Q.value = 3;
+  const ng = X.ctx.createGain(); ng.gain.setValueAtTime(vol * .5, t); ng.gain.exponentialRampToValueAtTime(.001, t + .12);
+  n.connect(nf).connect(ng).connect(X.bgm);
   for (const x of [o, o2, vib]) { x.start(t); x.stop(t + dur + .15); }
   n.start(t, rand(0, 1)); n.stop(t + .15);
 }
 function bombo(t, vol) {
-  const o = AC.createOscillator(), g = AC.createGain();
+  const o = X.ctx.createOscillator(), g = X.ctx.createGain();
   o.frequency.setValueAtTime(95, t); o.frequency.exponentialRampToValueAtTime(42, t + .25);
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + .5);
-  o.connect(g).connect(BGM.out); o.start(t); o.stop(t + .55);
-  const n = AC.createBufferSource(); n.buffer = noiseBuf; const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900;
-  const ng = AC.createGain(); ng.gain.setValueAtTime(vol * .35, t); ng.gain.exponentialRampToValueAtTime(.001, t + .08);
-  n.connect(f).connect(ng).connect(BGM.out); n.start(t, rand(0, 1)); n.stop(t + .1);
+  o.connect(g).connect(X.bgm); o.start(t); o.stop(t + .55);
+  const n = X.ctx.createBufferSource(); n.buffer = X.noise; const f = X.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900;
+  const ng = X.ctx.createGain(); ng.gain.setValueAtTime(vol * .35, t); ng.gain.exponentialRampToValueAtTime(.001, t + .08);
+  n.connect(f).connect(ng).connect(X.bgm); n.start(t, rand(0, 1)); n.stop(t + .1);
 }
 function shaker(t, vol) {
-  const n = AC.createBufferSource(); n.buffer = noiseBuf; const f = AC.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 6500;
-  const g = AC.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .01); g.gain.exponentialRampToValueAtTime(.001, t + .07);
-  n.connect(f).connect(g).connect(BGM.out); n.start(t, rand(0, 1)); n.stop(t + .09);
+  const n = X.ctx.createBufferSource(); n.buffer = X.noise; const f = X.ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 6500;
+  const g = X.ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .01); g.gain.exponentialRampToValueAtTime(.001, t + .07);
+  n.connect(f).connect(g).connect(X.bgm); n.start(t, rand(0, 1)); n.stop(t + .09);
 }
-function bgmStep(step, t) {
+function bgmStep(step, t, full, song) {
   const s = step % 8, bar = Math.floor(step / 8) % 8;
-  if (step > 0 && step % 64 === 0 && ++BGM.loops % 2 === 0) BGM.song = makeSong();
-  const full = state === 'play' && !paused;               // プレイ中はバンド全体、それ以外は静かに
   const chord = CHORDS[PROG[bar]];
   if (s === 0) bgmVoice(t, .9, mtof(chord[0] - 12), .22, 'triangle', 900);
   if (s === 4 && full) bgmVoice(t, .6, mtof(chord[0] - 5), .15, 'triangle', 900);
@@ -1667,13 +1750,12 @@ function bgmStep(step, t) {
     shaker(t, (s % 2 ? .025 : .045) * (s === 2 || s === 6 ? 1.4 : 1));
     if ([0, 2, 3, 4, 6, 7].includes(s)) charango(t, chord, s === 0 || s === 4 ? .045 : .028, s === 3 || s === 7);
   } else if (s === 0 || s === 4) {
-    chord.forEach((m, i) => bgmVoice(t + i * .09, 1.2, mtof(m + 12), .035, 'triangle', 2200).connect(BGM.rev));
+    chord.forEach((m, i) => bgmVoice(t + i * .09, 1.2, mtof(m + 12), .035, 'triangle', 2200).connect(X.rev));
   }
   // 旋律：2小節で1フレーズ
-  const ph = BGM.song[bar >> 1], local = (bar & 1) * 8 + s;
+  const ph = song[bar >> 1], local = (bar & 1) * 8 + s;
   for (const n of ph) if (n.s === local && !n.rest) quena(t, n.d * 60 / BGM.bpm / 4 * .95, n.m, full ? .11 : .085);
 }
-
 window.GameSound = {
   suspend() { if (AC && AC.state === 'running') AC.suspend(); },
   resume() { if (AC && AC.state === 'suspended') AC.resume(); },
@@ -1702,16 +1784,18 @@ addEventListener('orientationchange', () => setTimeout(resize, 200));
 if (window.visualViewport) visualViewport.addEventListener('resize', resize);
 resize();
 
-let last = performance.now();
+let last = performance.now(), loadFrame = 0;
 function loop(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   update(dt);
+  updateMusic();
   if (state !== 'play' && state !== 'dead') { // タイトル中：兵士は待機姿勢
     soldier.root.position.copy(player.pos); soldier.root.rotation.y = player.yaw + Math.PI;
     soldier.aim.rotation.x = -(12 * DEG + Math.sin(time * .8) * .03);
   }
   updateCamera(dt);
-  renderer.render(scene, camera);
+  // サウンドの書き出し中は描画を間引いて、書き出しを早く終わらせる
+  if (SND.ready || (++loadFrame % 6) === 0) renderer.render(scene, camera);
   drawHUD();
   requestAnimationFrame(loop);
 }
@@ -1720,6 +1804,7 @@ for (const g of glyphObjs.slice(0, 5)) {
   setYaw(g, Math.atan2(-g.center.x, -g.center.z)); setK(g, 1); setLook(g, 'stand');
 }
 document.body.classList.add('ready');
+prepareAudio();
 updateTitleBest();
 requestAnimationFrame(loop);
-window.__nazka = { get state() { return state; }, glyphObjs, player, fire, step(sec) { for (let t = 0; t < sec; t += 1 / 30) { update(1 / 30); updateCamera(1 / 30); } }, get missiles() { return missiles; }, get enemies() { return enemies; }, launchEnemy, keys, camera, setYaw, setK, setLook, riseGlyph, explosion, get cleared() { return cleared; }, finish: () => { cleared = glyphObjs.length; finish(); } };  // @web-only
+window.__nazka = { get state() { return state; }, glyphObjs, player, fire, step(sec) { for (let t = 0; t < sec; t += 1 / 30) { update(1 / 30); updateCamera(1 / 30); } }, get missiles() { return missiles; }, get enemies() { return enemies; }, launchEnemy, keys, camera, SND, setYaw, setK, setLook, riseGlyph, explosion, get cleared() { return cleared; }, finish: () => { cleared = glyphObjs.length; finish(); } };  // @web-only
