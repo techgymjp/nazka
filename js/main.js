@@ -1395,7 +1395,6 @@ function startGame() {
   show(null); hudVisible(true);
   if (!IS_TOUCH) requestLock();
   flashMsg('地上絵が立ち上がるのを探せ！');
-  showHint();
 }
 $('startBtn').onclick = () => withInterstitial(startGame);
 $('howtoStart').onclick = () => withInterstitial(startGame);
@@ -1502,11 +1501,6 @@ window.addEventListener('touchstart', () => document.body.classList.add('touch')
 window.addEventListener('pointerdown', () => initAudio(), { once: true });
 window.addEventListener('keydown', () => initAudio(), { once: true });
 
-let hintTimer = 0;
-function showHint() {
-  const h = $('hint'); h.classList.add('show');
-  clearTimeout(hintTimer); hintTimer = setTimeout(() => h.classList.remove('show'), 9000);
-}
 
 // ============================================================
 //  サウンド
@@ -1728,4 +1722,4 @@ for (const g of glyphObjs.slice(0, 5)) {
 document.body.classList.add('ready');
 updateTitleBest();
 requestAnimationFrame(loop);
-window.__nazka = { get state() { return state; }, glyphObjs, player, fire, step(sec) { for (let t = 0; t < sec; t += 1 / 30) { update(1 / 30); updateCamera(1 / 30); } }, get missiles() { return missiles; }, get enemies() { return enemies; }, launchEnemy, keys, camera, finish: () => { cleared = glyphObjs.length; finish(); } };  // @web-only
+window.__nazka = { get state() { return state; }, glyphObjs, player, fire, step(sec) { for (let t = 0; t < sec; t += 1 / 30) { update(1 / 30); updateCamera(1 / 30); } }, get missiles() { return missiles; }, get enemies() { return enemies; }, launchEnemy, keys, camera, setYaw, setK, setLook, riseGlyph, explosion, get cleared() { return cleared; }, finish: () => { cleared = glyphObjs.length; finish(); } };  // @web-only
