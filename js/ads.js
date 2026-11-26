@@ -16,7 +16,7 @@ window.Ads = (() => {
       },
       // 本番の広告ユニット（AdMob の Android アプリ「ナスカの地上絵をスティンガー砲で」）。ID が届いたら入れる
       production: {
-        interstitial: '',
+        interstitial: 'ca-app-pub-6411535997477460/5259872900',
         rewarded: '',
         banner: 'ca-app-pub-6411535997477460/9199117916',
       },
