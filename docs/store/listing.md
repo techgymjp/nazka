@@ -12,7 +12,7 @@ Play Console の「ストアの掲載情報」に貼り付けてください。�
 | スマートフォンのスクリーンショット | `ja/screenshot-1.png` 〜 `6.png`（英語は `en/`） | 1920 × 1080（横向き） |
 
 スクリーンショットは 1 → 6 の順に並べてください（最初の 2〜3 枚が検索結果に出るので、遊びの面白さが伝わる順にしてあります）。
-英語版の画像も、ゲーム画面の文字は日本語です。
+ゲームは日本語・英語に対応しています（端末の言語で自動的に切り替わり、タイトル画面でも切り替えられます）。英語版のスクリーンショットは英語の画面で撮っています。
 
 | # | 日本語のキャプション | 英語のキャプション |
 | --- | --- | --- |
@@ -58,6 +58,7 @@ Play Console の「ストアの掲載情報」に貼り付けてください。�
 ・撃ち抜いた地上絵は解説カードで紹介。「地上絵図鑑」でいつでも見返せる
 ・タイム、命中率、迎撃数で総合スコアとランク（S〜D）を競う
 ・オフラインでも遊べる。基本プレイ無料
+・日本語・英語に対応
 
 ■ 遊び方
 ・画面の左側をスワイプして移動（大きく倒すとダッシュ）
@@ -106,6 +107,7 @@ Meet 27 real geoglyphs, including the hummingbird, the monkey and the condor, an
 - Each hit unlocks a card about the figure; browse them all in the geoglyph guide
 - Compete for the best total score and rank (S to D) by time, accuracy and interceptions
 - Play offline. Free to play
+- Available in English and Japanese
 
 ■ How to play
 - Swipe on the left side of the screen to run (push further to dash)
@@ -128,7 +130,6 @@ Great for
 
 * The real Nazca Lines are a UNESCO World Heritage Site (1994). They only stand up in this game!
 * The line drawings are simplified recreations of real geoglyphs.
-* All text in the game is Japanese.
 
 ---
 

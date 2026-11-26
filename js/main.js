@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { GLYPHS, drawGlyph } from './glyphs.js';
+import { GLYPHS, drawGlyph, gName, gDesc } from './glyphs.js';
+const tr = (k, v) => window.I18N.t(k, v);
 
 // ============================================================
 //  ナスカの地上絵をスティンガー砲で
@@ -700,7 +701,7 @@ function aimRay() {
 }
 function fire() {
   if (state !== 'play' || paused) return;
-  if (reload > 0) { sfx.empty(); flashMsg('装填中…'); return; }
+  if (reload > 0) { sfx.empty(); flashMsg(tr('msg.reload')); return; }
   reload = RELOAD_T; shots++;
   soldier.root.updateMatrixWorld(true);
   const mz = soldier.aim.localToWorld(soldier.muzzle.clone());
@@ -860,7 +861,7 @@ function update(dt) {
       if (g.t >= FALL) {
         g.state = 'ground'; setLook(g, 'ground'); g.cool = COOL; returns++;
         dustBurst(g.center, 30, g.size * .5);
-        flashMsg(`取り逃がし：地上絵が地面に戻った（${returns}）`, true);
+        flashMsg(tr('msg.returned', { n: returns }), true);
         sfx.thud();
       }
     } else if (g.state === 'clearing') {
@@ -925,7 +926,7 @@ function update(dt) {
     if (ie) {
       m.done = true; ie.done = true; intercepts++;
       explosion(ie.pos, true); sfx.boom(true); sfx.chime();
-      flashMsg('迎撃成功！ ＋800');
+      flashMsg(tr('msg.intercept'));
       continue;
     }
     m.pos.addScaledVector(m.dir, step);
@@ -974,7 +975,7 @@ function launchEnemy(g) {
   explosion(from, false);
   for (let i = 0; i < 20; i++) smoke.add(from.x, from.y, from.z, rand(-3, 3), rand(0, 4), rand(-3, 3), rand(1.5, 3), rand(1, 2), 2, .3, .27, .24, .6, -.2, 1);
   sfx.enemyLaunch(from.distanceTo(player.pos));
-  flashMsg(`⚠ ${g.def.name}がミサイルを発射！`, true);
+  flashMsg(tr('msg.enemyLaunch', { name: gName(g.def) }), true);
 }
 function updateEnemies(dt) {
   // 発射のタイミング
@@ -1016,7 +1017,7 @@ function updateEnemies(dt) {
   enemies = enemies.filter(e => { if (e.done) scene.remove(e.obj); return !e.done; });
   // 警報
   document.body.classList.toggle('danger', !!nearestE);
-  el.warn.textContent = nearestE ? `⚠ ミサイル接近 ${nearest.toFixed(0)}m${nearest < 90 ? '　横に走ってかわせ！' : ''}` : '';
+  el.warn.textContent = nearestE ? tr('msg.warn', { d: nearest.toFixed(0) }) + (nearest < 90 ? tr('msg.dodge') : '') : '';
   if (nearestE) {
     nearestE.beep -= dt;
     if (nearestE.beep <= 0) { nearestE.beep = clamp(nearest / 260, .07, .6); sfx.alarm(nearest); }
@@ -1041,9 +1042,9 @@ function updateDeath(dt) {
 function showGameOver() {
   cardQ.length = 0; $('card').classList.remove('show');
   const acc = shots ? Math.round(hits / shots * 100) : 0;
-  $('goStats').innerHTML = `生存時間 <b>${fmtTime(elapsed)}</b><br>撃ち抜いた地上絵 <b>${cleared} / ${glyphObjs.length}</b>　命中率 <b>${acc}%</b>　迎撃 <b>${intercepts}</b>` +
-    (continues ? `<br>コンティニュー ${continues} 回` : '');
-  shareText = `「ナスカの地上絵をスティンガー砲で」で地上絵を ${cleared}/${glyphObjs.length} 体撃ち抜いたけど、撃墜された…（生存 ${fmtTime(elapsed)}${continues ? `・コンティニュー${continues}回` : ''}）`;
+  $('goStats').innerHTML = tr('over.stats', { time: fmtTime(elapsed), n: cleared, total: glyphObjs.length, acc, ic: intercepts }) +
+    (continues ? '<br>' + tr('over.cont', { n: continues }) : '');
+  shareText = tr('share.over', { n: cleared, total: glyphObjs.length, time: fmtTime(elapsed), cont: continues ? tr('share.cont', { n: continues }) : '' });
   fillGallery($('goGallery'), order);
   show('gameover');
 }
@@ -1088,7 +1089,7 @@ const hctx = hud.getContext('2d');
 const $ = id => document.getElementById(id);
 const el = { time: $('hTime'), count: $('hCount'), acc: $('hAcc'), miss: $('hMiss'), elev: $('hElev'), az: $('hAz'), lock: $('lockTag'), rel: $('reloadBar'), msg: $('msg'), cross: $('cross'), warn: $('warn') };
 function fmtTime(t) { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(1).padStart(4, '0')}`; }
-const DIRS = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'];
+const dirs = () => tr('hud.dirs').split(',');
 function azimuth() { let a = (-player.yaw / DEG) % 360; if (a < 0) a += 360; return a; }
 
 function drawHUD() {
@@ -1102,9 +1103,9 @@ function drawHUD() {
   el.miss.textContent = returns;
   el.elev.textContent = `${player.pitch >= 0 ? '+' : ''}${(player.pitch / DEG).toFixed(1)}°`;
   const az = azimuth();
-  el.az.textContent = `${az.toFixed(0).padStart(3, '0')}° ${DIRS[Math.round(az / 45) % 8]}`;
+  el.az.textContent = `${az.toFixed(0).padStart(3, '0')}° ${dirs()[Math.round(az / 45) % 8]}`;
   el.lock.classList.toggle('on', !!locked); el.lock.classList.toggle('seek', !locked && !!lockCand);
-  el.lock.textContent = locked ? `LOCK ON ── ${locked.def.name}` : lockCand ? 'シーカー捕捉中…' : '';
+  el.lock.textContent = locked ? tr('lock.on', { name: gName(locked.def) }) : lockCand ? tr('lock.seek') : '';
   el.cross.classList.toggle('locked', !!locked); el.cross.classList.toggle('seek', !locked && !!lockCand);
   el.rel.style.width = `${(1 - reload / RELOAD_T) * 100}%`;
   el.rel.parentElement.classList.toggle('ready', reload <= 0);
@@ -1212,9 +1213,9 @@ function nextCard() {
   cardBusy = true;
   const card = $('card');
   card.querySelector('.thumb').replaceChildren(thumb(def));
-  card.querySelector('.name').textContent = def.name;
-  card.querySelector('.no').textContent = `撃ち抜いた地上絵 ${cleared}/${glyphObjs.length}`;
-  card.querySelector('.desc').textContent = def.desc;
+  card.querySelector('.name').textContent = gName(def);
+  card.querySelector('.no').textContent = tr('card.no', { n: cleared, total: glyphObjs.length });
+  card.querySelector('.desc').textContent = gDesc(def);
   card.classList.add('show');
   setTimeout(() => { card.classList.remove('show'); setTimeout(nextCard, 350); }, 4200);
 }
@@ -1225,11 +1226,11 @@ function nextCard() {
 function computeScore() {
   const acc = shots ? hits / shots : 0;
   const parts = [
-    ['撃破ボーナス', `${cleared} 体 × 1,000`, cleared * 1000],
-    ['タイムボーナス', `${fmtTime(elapsed)}（15分から短縮した秒 × 40）`, Math.max(0, Math.round((900 - elapsed) * 40))],
-    ['命中率ボーナス', `${Math.round(acc * 100)}%（${hits}/${shots} 発）`, Math.round(acc * acc * 15000)],
-    ['迎撃ボーナス', `敵ミサイル撃墜 ${intercepts} 発 × 800`, intercepts * 800],
-    ['取り逃がしペナルティ', `地面に戻った ${returns} 回 × −500`, -returns * 500],
+    [tr('score.hits'), tr('score.hitsD', { n: cleared }), cleared * 1000],
+    [tr('score.time'), tr('score.timeD', { time: fmtTime(elapsed) }), Math.max(0, Math.round((900 - elapsed) * 40))],
+    [tr('score.acc'), tr('score.accD', { p: Math.round(acc * 100), h: hits, s: shots }), Math.round(acc * acc * 15000)],
+    [tr('score.ic'), tr('score.icD', { n: intercepts }), intercepts * 800],
+    [tr('score.miss'), tr('score.missD', { n: returns }), -returns * 500],
   ];
   const total = Math.max(0, parts.reduce((s, p) => s + p[2], 0));
   const rank = total >= 62000 ? 'S' : total >= 52000 ? 'A' : total >= 42000 ? 'B' : total >= 30000 ? 'C' : 'D';
@@ -1246,8 +1247,8 @@ function finish() {
   try { localStorage.setItem('nazka_best', JSON.stringify(best)); } catch (e) {}
   $('rTotal').textContent = r.total.toLocaleString();
   $('rRank').textContent = r.rank; $('rRank').className = 'rank r' + r.rank;
-  $('rBest').textContent = (newBest ? '🏆 自己ベスト更新！' : `自己ベスト ${best.score.toLocaleString()}`) + (continues ? `　コンティニュー ${continues} 回` : '');
-  shareText = `「ナスカの地上絵をスティンガー砲で」で全${glyphObjs.length}体の地上絵を ${fmtTime(elapsed)} で撃ち抜いた！ スコア ${r.total.toLocaleString()}（ランク ${r.rank}）${continues ? `・コンティニュー${continues}回` : ''}`;
+  $('rBest').textContent = (newBest ? tr('result.newBest') : tr('result.best', { n: best.score.toLocaleString() })) + (continues ? '　' + tr('over.cont', { n: continues }) : '');
+  shareText = tr('share.clear', { total: glyphObjs.length, time: fmtTime(elapsed), score: r.total.toLocaleString(), rank: r.rank, cont: continues ? tr('share.cont', { n: continues }) : '' });
   $('rTable').innerHTML = r.parts.map(([a, b, c]) => `<tr><th>${a}</th><td>${b}</td><td class="${c < 0 ? 'neg' : ''}">${c > 0 ? '+' : c < 0 ? '−' : '±'}${Math.abs(c).toLocaleString()}</td></tr>`).join('');
   fillGallery($('rGallery'), order);
   show('result');
@@ -1272,7 +1273,7 @@ function updateBanner() {
   document.body.classList.toggle('banner', want && Ads.available);
 }
 function updateTitleBest() {
-  $('titleBest').textContent = best.score ? `ベストスコア ${best.score.toLocaleString()}` : '';
+  $('titleBest').textContent = best.score ? tr('title.best', { n: best.score.toLocaleString() }) : '';
 }
 // 全画面広告：出撃・タイトルへ戻る・ポーズからの再開・もう一度 のたびに毎回出す（アプリのみ）
 async function withInterstitial(next) {
@@ -1301,10 +1302,10 @@ const SHARE_URL = 'https://techgym.jp/column/claude-code-game-nazka/';
 async function share() {
   const nativeShare = plugin('Share');
   try {
-    if (nativeShare) { await nativeShare.share({ title: 'ナスカの地上絵をスティンガー砲で', text: shareText, url: SHARE_URL, dialogTitle: '結果をシェア' }); return; }
-    if (navigator.share) { await navigator.share({ title: 'ナスカの地上絵をスティンガー砲で', text: shareText, url: SHARE_URL }); return; }
+    if (nativeShare) { await nativeShare.share({ title: tr('share.title'), text: shareText, url: SHARE_URL, dialogTitle: tr('share.dialog') }); return; }
+    if (navigator.share) { await navigator.share({ title: tr('share.title'), text: shareText, url: SHARE_URL }); return; }
     await navigator.clipboard.writeText(`${shareText} ${SHARE_URL}`);
-    flashMsg('結果をコピーしました');
+    flashMsg(tr('msg.copied'));
   } catch (e) { /* キャンセル */ }
 }
 
@@ -1315,8 +1316,8 @@ const cont = { active: false, busy: false, deadline: 0, timer: 0 };
 function canContinue() { return Ads.canReward && continues < CONT_MAX; }
 function offerContinue() {
   Object.assign(cont, { active: true, busy: false, deadline: performance.now() + CONT_WAIT * 1000 });
-  $('contWatch').disabled = false; $('contWatch').textContent = '広告を見て続ける';
-  $('contNote').textContent = `広告を最後まで見ると、この場所から続けられます（あと ${CONT_MAX - continues} 回）`;
+  $('contWatch').disabled = false; $('contWatch').textContent = tr('cont.watch');
+  $('contNote').textContent = tr('cont.note', { n: CONT_MAX - continues });
   show('cont');
   tickContinue();
 }
@@ -1326,7 +1327,7 @@ function tickContinue() {
   if (cont.busy) { cont.deadline = performance.now() + CONT_WAIT * 1000; }   // 広告の表示中は数えない
   else {
     const left = (cont.deadline - performance.now()) / 1000;
-    $('contNo').textContent = `あきらめる（${Math.max(0, Math.ceil(left))}）`;
+    $('contNo').textContent = tr('cont.no', { s: Math.max(0, Math.ceil(left)) });
     if (left <= 0) { closeContinue(); showGameOver(); return; }
   }
   cont.timer = setTimeout(tickContinue, 200);
@@ -1336,11 +1337,11 @@ $('contNo').onclick = () => { if (!cont.active || cont.busy) return; closeContin
 $('contWatch').onclick = async () => {
   if (!cont.active || cont.busy) return;
   cont.busy = true;
-  $('contWatch').disabled = true; $('contWatch').textContent = '広告を読み込み中…';
+  $('contWatch').disabled = true; $('contWatch').textContent = tr('cont.loading');
   const result = await Ads.showRewarded();
   if (!cont.active) return;
   if (result === 'unavailable') {
-    $('contNote').textContent = '広告を読み込めませんでした';
+    $('contNote').textContent = tr('cont.fail');
     setTimeout(() => { closeContinue(); showGameOver(); }, 1800);
     return;
   }
@@ -1352,7 +1353,7 @@ $('contWatch').onclick = async () => {
   soldier.root.rotation.set(0, player.yaw + Math.PI, 0, 'YXZ');
   enemyTimer = Math.max(enemyTimer, 6);
   show(null); hudVisible(true);
-  flashMsg(`コンティニュー！（${continues}/${CONT_MAX}）`);
+  flashMsg(tr('msg.continued', { n: continues, max: CONT_MAX }));
 };
 
 // Android の戻るボタン：プレイ中はポーズ（ポーズ中なら再開）、遊び方・図鑑はタイトルへ、タイトル・結果画面ではアプリを終了
@@ -1384,7 +1385,7 @@ function fillGallery(container, list) {
     const d = document.createElement('div'); d.className = 'gcard';
     d.append(thumb(def, 120));
     const t = document.createElement('div');
-    t.innerHTML = `<b>${i + 1}. ${def.name}</b><p>${def.desc}</p>`;
+    t.innerHTML = `<b>${i + 1}. ${gName(def)}</b><p>${gDesc(def)}</p>`;
     d.append(t); return d;
   }));
 }
@@ -1394,11 +1395,18 @@ function startGame() {
   state = 'play'; paused = false;
   show(null); hudVisible(true);
   if (!IS_TOUCH) requestLock();
-  flashMsg('地上絵が立ち上がるのを探せ！');
+  flashMsg(tr('msg.start'));
 }
 $('startBtn').onclick = () => withInterstitial(startGame);
 $('howtoStart').onclick = () => withInterstitial(startGame);
 $('howtoBtn').onclick = () => show('howto');
+$('langBtn').onclick = () => I18N.toggle();
+// 言語を切り替えたら、動的に作る表示も作り直す
+I18N.onChange(() => {
+  updateTitleBest();
+  setLoading(SND.ready ? 1 : (SND.progress || 0), SND.ready);
+  if (!$('gallery').classList.contains('hidden')) fillGallery($('gList'), GLYPHS);
+});
 $('howtoBack').onclick = () => withInterstitial(goTitle);
 $('retryBtn').onclick = () => withInterstitial(startGame);
 $('rShare').onclick = share;
@@ -1603,7 +1611,7 @@ async function renderMusic(full, songs) {
 async function prepareAudio() {
   const total = Object.keys(SFX_RECIPES).length + 2;
   let done = 0;
-  const tick = () => setLoading(++done / total);
+  const tick = () => setLoading(SND.progress = ++done / total);
   setLoading(0); SND.t0 = performance.now();
   try {
     for (const [k, [sec, fn]] of Object.entries(SFX_RECIPES)) { SND.buf[k] = await renderOffline(sec, 1, fn); tick(); }
@@ -1620,7 +1628,7 @@ function setLoading(p, done) {
   for (const id of ['startBtn', 'howtoStart']) {
     const b = $(id); if (!b) continue;
     b.disabled = !done;
-    b.textContent = done ? '出撃する' : `サウンドを準備中… ${Math.round(p * 100)}%`;
+    b.textContent = done ? tr('btn.start') : tr('btn.loading', { p: Math.round(p * 100) });
   }
 }
 // BGM：静かな編成とプレイ中の編成を同時にループ再生し、場面に合わせて音量を入れ替える

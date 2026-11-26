@@ -31,6 +31,7 @@
   .btns { display:flex; gap:12px; justify-content:center; flex-wrap:wrap }
   button { font:inherit; font-size:18px; font-weight:bold; letter-spacing:.08em; color:var(--ink); cursor:pointer; border:none; border-radius:999px; padding:13px 34px;
     background:linear-gradient(#ffd99a,#e6a65a); box-shadow:0 4px 0 #8a5426,0 0 22px rgba(255,190,110,.4) }
+  button.small { font-size:14px; padding:7px 18px; letter-spacing:.04em }
   button.sub { background:rgba(255,230,190,.12); color:#fff3d6; box-shadow:none; border:1px solid rgba(255,230,190,.4) }
   button:active { transform:translateY(2px) }
   .note { font-size:12px; opacity:.65; margin-top:14px; line-height:1.6 }
@@ -136,12 +137,12 @@
 <!-- HUD -->
 <div id="stats" class="hudui">
   <div class="big" id="hTime">0:00.0</div>
-  <span>撃破 <b id="hCount">0 / 0</b></span>　<span>命中率 <b id="hAcc">—</b></span>　<span>取り逃がし <b id="hMiss">0</b></span>
+  <span><span data-i18n="hud.hits">撃破</span> <b id="hCount">0 / 0</b></span>　<span><span data-i18n="hud.acc">命中率</span> <b id="hAcc">—</b></span>　<span><span data-i18n="hud.miss">取り逃がし</span> <b id="hMiss">0</b></span>
 </div>
 <div id="cross" class="hudui"><i></i></div>
 <div id="lockTag" class="hudui"></div>
 <div id="gauge" class="hudui">
-  <div class="row"><span>仰角<b id="hElev">+0.0°</b></span><span>方位<b id="hAz">000°</b></span></div>
+  <div class="row"><span><span data-i18n="hud.elev">仰角</span><b id="hElev">+0.0°</b></span><span><span data-i18n="hud.az">方位</span><b id="hAz">000°</b></span></div>
   <div id="reload"><div id="reloadBar"></div></div>
 </div>
 <div id="msg"></div>
@@ -153,57 +154,58 @@
   <button id="fireBtn">FIRE</button>
 </div>
 <button id="muteBtn">🔊</button>
-<button id="pauseBtn" class="hudui" aria-label="一時停止">Ⅱ</button>
+<button id="pauseBtn" class="hudui" aria-label="一時停止" data-i18n-aria="hud.pause">Ⅱ</button>
 
 <!-- タイトル -->
 <div id="title" class="overlay">
   <div class="panel">
-    <h1><small>NAZCA × STINGER</small>ナスカの地上絵を<br>スティンガー砲で</h1>
-    <p class="tagline">立ち上がる地上絵を、撃ち抜け。</p>
+    <h1 data-i18n="title.h1"><small>NAZCA × STINGER</small>ナスカの地上絵を<br>スティンガー砲で</h1>
+    <p class="tagline" data-i18n="title.tag">立ち上がる地上絵を、撃ち抜け。</p>
     <p class="bestline" id="titleBest"></p>
     <div class="btns" style="margin-top:18px"><button id="startBtn">出撃する</button></div>
-    <div class="btns" style="margin-top:14px"><button id="howtoBtn" class="sub">遊び方</button><button id="galleryBtn" class="sub">地上絵図鑑</button></div>
+    <div class="btns" style="margin-top:14px"><button id="howtoBtn" class="sub" data-i18n="btn.howto">遊び方</button><button id="galleryBtn" class="sub" data-i18n="btn.gallery">地上絵図鑑</button></div>
+    <div class="btns" style="margin-top:12px"><button id="langBtn" class="sub small" data-i18n="title.lang">English</button></div>
   </div>
   <div id="legal">
     <span id="buildInfo"></span>
-    <a href="https://techgym.jp/privacy-policy/" target="_blank" rel="noopener">プライバシーポリシー</a>
-    <span id="adPrivacy" hidden>｜<a href="#" id="adPrivacyLink">広告の設定</a></span>
+    <a href="https://techgym.jp/privacy-policy/" data-i18n-href="legal.privacyUrl" data-i18n="legal.privacy" target="_blank" rel="noopener">プライバシーポリシー</a>
+    <span id="adPrivacy" hidden>｜<a href="#" id="adPrivacyLink" data-i18n="legal.ads">広告の設定</a></span>
   </div>
 </div>
 
 <!-- 遊び方 -->
 <div id="howto" class="overlay hidden">
   <div class="panel">
-    <h2>遊び方</h2>
-    <p class="lead">ペルー・ナスカ平原。砂漠に描かれた地上絵が、地面ごと次々と<b>垂直に立ち上がる</b>！<br>
+    <h2 data-i18n="howto.h">遊び方</h2>
+    <p class="lead" data-i18n="howto.lead">ペルー・ナスカ平原。砂漠に描かれた地上絵が、地面ごと次々と<b>垂直に立ち上がる</b>！<br>
       倒れて地上絵に戻る前に、スティンガーで撃ち抜け。全27体を撃ち抜くまでのタイムと腕前を競おう。</p>
     <ul class="howto">
-      <li class="pcOnly"><b>移動</b>：<kbd>W</kbd>前 <kbd>S</kbd>後 <kbd>A</kbd>左 <kbd>D</kbd>右（<kbd>Shift</kbd>でダッシュ）— 走り回って好位置を取ろう</li>
-      <li class="pcOnly"><b>照準</b>：マウスで方位と<b>仰角</b>を調整（<kbd>↑</kbd><kbd>↓</kbd>・ホイールで微調整）</li>
-      <li class="pcOnly"><b>発射</b>：クリック / <kbd>Space</kbd>　地上絵に照準を合わせると<b>ロックオン</b>して誘導</li>
-      <li class="tch"><b>移動</b>：画面の左側をスワイプ（大きく倒すとダッシュ）</li>
-      <li class="tch"><b>照準</b>：画面の右側をスワイプ（上下で<b>仰角</b>）</li>
-      <li class="tch"><b>発射</b>：<b>FIRE</b> ボタン　地上絵に照準を合わせると<b>ロックオン</b>して誘導</li>
-      <li>地上絵は一定時間で<b>倒れて地面に戻る</b>（取り逃がし＝減点）</li>
-      <li>立ち上がった地上絵は<b>ミサイルを撃ってくる</b>。当たれば即ゲームオーバー！<br>警報が鳴ったら、直前で<b>横に走ってかわす</b>か、スティンガーで<b>迎撃</b>しよう</li>
-      <li>スコア＝撃破数＋タイム＋命中率＋迎撃−取り逃がし</li>
-      <li class="pcOnly"><kbd>Esc</kbd>で一時停止、<kbd>M</kbd>で消音</li>
-      <li class="tch">画面上の <b>Ⅱ</b> ボタンで一時停止</li>
+      <li class="pcOnly" data-i18n="howto.pcMove"><b>移動</b>：<kbd>W</kbd>前 <kbd>S</kbd>後 <kbd>A</kbd>左 <kbd>D</kbd>右（<kbd>Shift</kbd>でダッシュ）— 走り回って好位置を取ろう</li>
+      <li class="pcOnly" data-i18n="howto.pcAim"><b>照準</b>：マウスで方位と<b>仰角</b>を調整（<kbd>↑</kbd><kbd>↓</kbd>・ホイールで微調整）</li>
+      <li class="pcOnly" data-i18n="howto.pcFire"><b>発射</b>：クリック / <kbd>Space</kbd>　地上絵に照準を合わせると<b>ロックオン</b>して誘導</li>
+      <li class="tch" data-i18n="howto.tMove"><b>移動</b>：画面の左側をスワイプ（大きく倒すとダッシュ）</li>
+      <li class="tch" data-i18n="howto.tAim"><b>照準</b>：画面の右側をスワイプ（上下で<b>仰角</b>）</li>
+      <li class="tch" data-i18n="howto.tFire"><b>発射</b>：<b>FIRE</b> ボタン　地上絵に照準を合わせると<b>ロックオン</b>して誘導</li>
+      <li data-i18n="howto.fall">地上絵は一定時間で<b>倒れて地面に戻る</b>（取り逃がし＝減点）</li>
+      <li data-i18n="howto.enemy">立ち上がった地上絵は<b>ミサイルを撃ってくる</b>。当たれば即ゲームオーバー！<br>警報が鳴ったら、直前で<b>横に走ってかわす</b>か、スティンガーで<b>迎撃</b>しよう</li>
+      <li data-i18n="howto.score">スコア＝撃破数＋タイム＋命中率＋迎撃−取り逃がし</li>
+      <li class="pcOnly" data-i18n="howto.pcPause"><kbd>Esc</kbd>で一時停止、<kbd>M</kbd>で消音</li>
+      <li class="tch" data-i18n="howto.tPause">画面上の <b>Ⅱ</b> ボタンで一時停止</li>
     </ul>
-    <div class="btns" style="margin-top:4px"><button id="howtoStart">出撃する</button><button id="howtoBack" class="sub">もどる</button></div>
-    <p class="note">登場する地上絵はすべて、ナスカとその周辺（パルパ・パラカス）に実在する地上絵がモチーフです（線画は簡略化した再現）。<br>
+    <div class="btns" style="margin-top:4px"><button id="howtoStart">出撃する</button><button id="howtoBack" class="sub" data-i18n="btn.back">もどる</button></div>
+    <p class="note" data-i18n="howto.note">登場する地上絵はすべて、ナスカとその周辺（パルパ・パラカス）に実在する地上絵がモチーフです（線画は簡略化した再現）。<br>
       本物の地上絵は1994年に世界遺産に登録された大切な文化財。立ち上がるのはゲームの中だけ！</p>
   </div>
 </div>
 
 <!-- 一時停止 -->
-<div id="pause" class="overlay hidden"><div class="panel"><h2>一時停止中</h2>
-  <div class="btns" style="margin-top:18px"><button id="pauseResume">再開する</button><button id="pauseTitle" class="sub">タイトルへ</button></div></div></div>
+<div id="pause" class="overlay hidden"><div class="panel"><h2 data-i18n="pause.h">一時停止中</h2>
+  <div class="btns" style="margin-top:18px"><button id="pauseResume" data-i18n="btn.resume">再開する</button><button id="pauseTitle" class="sub" data-i18n="btn.toTitle">タイトルへ</button></div></div></div>
 
 <!-- コンティニュー（アプリのみ：リワード広告） -->
 <div id="cont" class="overlay hidden">
   <div class="panel">
-    <h1 style="color:#ff8a70"><small>CONTINUE?</small>撃墜された！</h1>
+    <h1 style="color:#ff8a70" data-i18n="cont.h1"><small>CONTINUE?</small>撃墜された！</h1>
     <p class="lead" id="contNote"></p>
     <div class="btns"><button id="contWatch">広告を見て続ける</button><button id="contNo" class="sub">あきらめる</button></div>
   </div>
@@ -212,34 +214,34 @@
 <!-- 図鑑 -->
 <div id="gallery" class="overlay hidden">
   <div class="panel wide">
-    <h2>ナスカの地上絵 図鑑</h2>
-    <p class="note" style="margin-top:0">紀元前後〜紀元700年ごろのナスカ文化の人々が、地表の赤黒い石を取り除いて下の明るい地面を出すことで描いたと考えられています。</p>
+    <h2 data-i18n="gallery.h">ナスカの地上絵 図鑑</h2>
+    <p class="note" style="margin-top:0" data-i18n="gallery.note">紀元前後〜紀元700年ごろのナスカ文化の人々が、地表の赤黒い石を取り除いて下の明るい地面を出すことで描いたと考えられています。</p>
     <div class="gallery" id="gList"></div>
-    <button id="galleryBack" class="sub">もどる</button>
+    <button id="galleryBack" class="sub" data-i18n="btn.back">もどる</button>
   </div>
 </div>
 
 <!-- ゲームオーバー -->
 <div id="gameover" class="overlay hidden">
   <div class="panel wide">
-    <h1 style="color:#ff8a70"><small>GAME OVER</small>撃墜された…</h1>
+    <h1 style="color:#ff8a70" data-i18n="over.h1"><small>GAME OVER</small>撃墜された…</h1>
     <p class="stats lead" id="goStats"></p>
     <div class="gallery" id="goGallery"></div>
-    <div class="btns"><button id="goRetry">もう一度</button><button id="goShare" class="sub">シェア</button><button id="goTitle" class="sub">タイトルへ</button></div>
+    <div class="btns"><button id="goRetry" data-i18n="btn.retry">もう一度</button><button id="goShare" class="sub" data-i18n="btn.share">シェア</button><button id="goTitle" class="sub" data-i18n="btn.toTitle">タイトルへ</button></div>
   </div>
 </div>
 
 <!-- リザルト -->
 <div id="result" class="overlay hidden">
   <div class="panel wide">
-    <h2>全地上絵 撃ち抜き完了！</h2>
+    <h2 data-i18n="result.h">全地上絵 撃ち抜き完了！</h2>
     <div id="rRank" class="rank">A</div>
     <div class="total" id="rTotal">0</div>
     <div class="note" id="rBest" style="margin-top:4px"></div>
     <table id="rTable"></table>
-    <h2 style="margin-top:16px;font-size:18px">撃ち抜いた順の地上絵</h2>
+    <h2 style="margin-top:16px;font-size:18px" data-i18n="result.order">撃ち抜いた順の地上絵</h2>
     <div class="gallery" id="rGallery"></div>
-    <div class="btns"><button id="retryBtn">もう一度</button><button id="rShare" class="sub">シェア</button><button id="rGalleryAll" class="sub">図鑑</button><button id="titleBtn" class="sub">タイトルへ</button></div>
+    <div class="btns"><button id="retryBtn" data-i18n="btn.retry">もう一度</button><button id="rShare" class="sub" data-i18n="btn.share">シェア</button><button id="rGalleryAll" class="sub" data-i18n="btn.guide">図鑑</button><button id="titleBtn" class="sub" data-i18n="btn.toTitle">タイトルへ</button></div>
   </div>
 </div>
 
@@ -247,12 +249,14 @@
 <script src="./js/ads-config.js"></script>
 <script src="./js/build-info.js"></script>
 <script src="./js/ads.js"></script>
+<script src="./js/i18n.js"></script>
 <script type="module" src="./js/main.js"></script>
 <script>
   window.addEventListener('error', e => { const l = document.getElementById('loading'); if (l && !document.body.classList.contains('ready')) l.textContent = '読み込みに失敗しました：' + e.message; });
   // スマホ・アプリではタッチ操作の説明だけ、PC ではキーボード・マウスの説明だけを出す
   const touchUI = matchMedia('(pointer: coarse)').matches || !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   document.querySelectorAll(touchUI ? '.pcOnly' : '.tch').forEach(e => e.remove());
+  I18N.apply();
 </script>
 </body>
 </html>
